@@ -27,6 +27,8 @@ public:
     Node();
     Node(std::string name, std::vector<Net*> nets, int xcoord=0, int ycoord=0);
     ~Node();
+    int getX() const { return xcoord; }
+    int getY() const { return ycoord; }
     std::vector<Net*> getNets() const;
     void addNet(Net* net);
     void removeNet(Net* net);
@@ -81,7 +83,10 @@ public:
     Grid(int rows, int cols);
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
+    void initialPlacement(const std::map<std::string, Node>& nodes);
+    int calcCost() const;
     int getCost();
+    
     friend class square;
     friend class utilGrid;
 };

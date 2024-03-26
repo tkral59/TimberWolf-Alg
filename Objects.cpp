@@ -171,6 +171,65 @@ void Grid::swap(int x1, int y1, int x2, int y2) {
     else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to swap non-matching types." << endl;
 }
 
-int Grid::getCost() {
-    // Implement the function to get cost
+void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
+    int x = 0, y = 0; // Starting coordinates for placement.
+    for (const auto& pair : nodes) {
+        const Node& node = pair.second;
+        
+        // Create a square with this node. Adjust according to your square constructor.
+        square s(squareType::Node, &node); // Note: Adjust based on actual constructor and data handling.
+        this->write(x, y, s); // Place the node on the grid.
+
+        // Update coordinates for next placement, with a simple pattern for spacing.
+        x += 2; // Assuming a grid spacing pattern. Adjust as needed.
+        if (x >= this->grid.size()) { // Move to the next row if we've reached the end of the current row.
+            x = 0;
+            y += 2;
+        }
+
+        // Optional: Add checks for grid bounds if your placement pattern can exceed grid dimensions.
+        if (y >= this->grid[0].size()) {
+            std::cout << "Warning: Grid is full, not all nodes have been placed." << std::endl;
+            break; // Exit if we run out of grid space.
+        }
+    }
 }
+
+int Grid::calcCost() const {
+    int totalCost = 0;
+    for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
+        const Net& net = netPair.second;
+
+        // Calculate the wirelength for this net by summing the Manhattan distances
+        // between all pairs of nodes connected by this net.
+        for (size_t i = 0; i < net.Nodes.size(); ++i) {
+            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
+                int manhattanDistance = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX()) +
+                                        abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
+                totalCost += manhattanDistance;
+            }
+        }
+    }
+    return totalCost;
+}
+/* Can use anyone which is better
+int Grid::getCost() {
+    int totalCost = 0;
+    
+    // Assuming 'nets' is a member of Grid that stores all the nets and their connected nodes
+    for (const auto& netPair : nets) {
+        const Net& net = netPair.second;
+        
+        // Calculate the total wirelength for this net
+        for (size_t i = 0; i < net.Nodes.size(); ++i) {
+            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
+                int dx = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX());
+                int dy = abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
+                totalCost += dx + dy; // Add the Manhattan distance to the total cost
+            }
+        }
+    }
+    
+    return totalCost;
+}
+*/

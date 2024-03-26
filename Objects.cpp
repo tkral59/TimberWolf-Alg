@@ -195,41 +195,31 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     }
 }
 
-int Grid::calcCost() const {
-    int totalCost = 0;
+int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets) const {
+    float totalCost = 0, totalLength = 0, overlapCount = 0;
+    vector<Net*> bounded;
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
         const Net& net = netPair.second;
-
-        // Calculate the wirelength for this net by summing the Manhattan distances
-        // between all pairs of nodes connected by this net.
-        for (size_t i = 0; i < net.Nodes.size(); ++i) {
-            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
-                int manhattanDistance = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX()) +
-                                        abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
-                totalCost += manhattanDistance;
-            }
-        }
-    }
-    return totalCost;
-}
-/* Can use anyone which is better
-int Grid::getCost() {
-    int totalCost = 0;
-    
-    // Assuming 'nets' is a member of Grid that stores all the nets and their connected nodes
-    for (const auto& netPair : nets) {
-        const Net& net = netPair.second;
+        int xmin = net.Nodes.at(0)->getX(), xmax = xmin, ymin = net.Nodes.at(0)->getX(), ymax = ymin;
+        // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
         
-        // Calculate the total wirelength for this net
-        for (size_t i = 0; i < net.Nodes.size(); ++i) {
-            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
-                int dx = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX());
-                int dy = abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
-                totalCost += dx + dy; // Add the Manhattan distance to the total cost
+        for (const auto& netPair : nets) {
+            const Net& net = netPair.second;
+
+            //Find half-param bounds
+            for (size_t i = 0; i < net.Nodes.size(); ++i) {
+                int x = net.Nodes.at(i)->getX();
+                int y = net.Nodes.at(i)->getY();
+                if (x < xmin) xmin = x;
+                if (x > xmax) xmax = x;
+                if (y < ymin) ymin = y;
+                if (y > ymax) ymax = y;
+            }
+            bounded.push_back(&netPair.second);
+            for (net : bounded) {
+                if (net.name != netPair.first) {
+                    //overlap cost
+                }
             }
         }
-    }
-    
-    return totalCost;
 }
-*/

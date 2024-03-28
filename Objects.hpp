@@ -17,6 +17,11 @@ struct Net {
     Net(const std::string& name) : name(name) {}
 };
 
+struct Bounds {
+    int x1, x2, y1, y2;
+    const Net* net;
+};
+
 class Node {
 private:
     std::string name;
@@ -25,7 +30,7 @@ private:
 
 public:
     Node();
-    Node(std::string name, std::vector<Net*> nets, int xcoord=0, int ycoord=0);
+    Node(std::string name, std::vector<Net*> nets, int xcoord = 0, int ycoord = 0);
     ~Node();
     int getX() const { return xcoord; }
     int getY() const { return ycoord; }
@@ -45,12 +50,12 @@ enum class squareType {
 class square {
 private:
     squareType type;
-    Node* node;
+    const Node* node;
     int wires; //count of wires
-    Node* pins[2];
+    //Node* pins[2];
 public:
     square();
-    square(squareType type, Node* n = nullptr, int wires = 0);
+    square(squareType type, const Node* n = nullptr, int wires = 0);
     void setType(squareType st);
     squareType getType();
     void incWires(); //increment wire count if wire type
@@ -70,8 +75,8 @@ public:
     utilGrid(vector<vector<square>> const ogrid);
     void write(int x, int y, square s); //writing a node into a square
     void swap(int x1, int y1, int x2, int y2); //swapping two nodes
-    int calcCost(); //calc cost
     friend class square;
+    friend class Grid;
 };
 
 class Grid {
@@ -84,9 +89,8 @@ public:
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void initialPlacement(const std::map<std::string, Node>& nodes);
-    int calcCost() const;
-    int getCost();
-    
+    int calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const;
+
     friend class square;
     friend class utilGrid;
 };

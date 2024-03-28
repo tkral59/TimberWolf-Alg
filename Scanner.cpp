@@ -46,7 +46,7 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 	else {
 		cout << "Failed to open node file." << endl;
 	}
-	
+
 
 	//NETFILE
 	myFile.open(netfile);
@@ -82,7 +82,7 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 		}
 	}
 	else cout << "Failed to open net file." << endl;
-	
+
 }
 
 void createInitialGrids(map<string, Node> nodes, map<string, Net> nets) {

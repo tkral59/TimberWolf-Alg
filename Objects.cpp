@@ -62,7 +62,7 @@ square::square() {
     wires = 0;
 }
 
-square::square(squareType type, Node* n, int wires) {
+square::square(squareType type, const Node* n, int wires) {
     this->type = type;
     node = n;
     this->wires = wires;
@@ -88,11 +88,6 @@ void square::setNode(Node* n) {
     node = n;
 }
 
-bool square::PinsFull() {
-    if (pins[0] == nullptr || pins[1] == nullptr) return false;
-    else return true;
-}
-
 
 //UTILGRID CLASS
 
@@ -109,7 +104,7 @@ utilGrid::utilGrid(vector<vector<square>> ogrid) {
             spacedMatrix[2 * i][2 * j] = ogrid[i][j];
         }
     }
-    for (int i = 0; i < (n*2)-1; ++i) {
+    for (int i = 0; i < (n * 2) - 1; ++i) {
         for (int j = 0; j < (n * 2) - 1; ++j) {
             if (!(spacedMatrix[i][j].getType() == squareType::Node || spacedMatrix[i][j].getType() == squareType::Terminal)) {
                 square s = square(squareType::Routing, 0);
@@ -140,10 +135,6 @@ void utilGrid::swap(int x1o, int y1o, int x2o, int y2o) {
     }
     else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to swap non-matching types." << endl;
     else cout << "Error: Trying to swap either Blank or Routing type square." << endl;
-}
-
-int utilGrid::calcCost() {
-    // Implement the function to calculate cost
 }
 
 
@@ -204,42 +195,47 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     }
 }
 
-
-int Grid::calcCost() const {
-    int totalCost = 0;
+int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const {
+    float totalCost = 0, totalLength = 0, overlapCount = 0;
+    vector<Bounds> bounded;
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
-        const Net& net = netPair.second;
+        const Net* net = &netPair.second;
+        int xmin = net->Nodes.at(0)->getX(), xmax = xmin, ymin = net->Nodes.at(0)->getX(), ymax = ymin;
+        Bounds newBounds;
+        // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
 
-        // Calculate the wirelength for this net by summing the Manhattan distances
-        // between all pairs of nodes connected by this net.
-        for (size_t i = 0; i < net.Nodes.size(); ++i) {
-            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
-                int manhattanDistance = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX()) +
-                                        abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
-                totalCost += manhattanDistance;
+        for (size_t i = 0; i < net->Nodes.size(); ++i) { //iterate through nodes and find min/max x/y
+            int x = net->Nodes.at(i)->getX();
+            int y = net->Nodes.at(i)->getY();
+            if (x < xmin) xmin = x;
+            if (x > xmax) xmax = x;
+            if (y < ymin) ymin = y;
+            if (y > ymax) ymax = y;
+            totalLength = abs(xmax - xmin) + abs(ymax - ymin);
+            newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = net;
+        }
+        bounded.push_back(newBounds);
+        int olcount = 0;
+        for (Bounds const bounds : bounded) {
+            if (bounds.net->name != netPair.first) {
+                //overlap cost (total nets overlap)
+                float x_overlap = max(0, min(newBounds.x2, bounds.x2) - max(newBounds.x1, bounds.x1)); //x overlap
+                float y_overlap = max(0, min(newBounds.y2, bounds.y2) - max(newBounds.y1, bounds.y1));//y overlap
+                float interArea = x_overlap * y_overlap; //total intersection area
+                float area1 = abs(newBounds.x2 - newBounds.x1) * abs(newBounds.y2 - newBounds.y1); //calculating area of current net box
+                float area2 = abs(bounds.x2 - bounds.x1) * abs(bounds.y2 - bounds.y1); //net j box area
+                if ((interArea / min(area1, area2)) <= 0.25) { //if overlap is greater than 25%
+                    olcount++;
+                    overlapCount++;
+                    if (olcount > wireConstraint) routable = false; //if overlapping net boxes > constraint then the design is not routable
+                }
             }
         }
     }
+    delete& bounded;
+    float ocnorm = overlapCount / nets.size(); //normalized overlap count cost => total count of nets is max, min is zero
+    float den = (ug.grid.size() * ug.grid[0].size());
+    float tlnorm = totalLength / den; //normallized total length cost => total grid area * net count is max, min is ~ 1
+    totalCost = (w1 * tlnorm) + (w2 * ocnorm);
     return totalCost;
 }
-/* Can use anyone which is better
-int Grid::getCost() {
-    int totalCost = 0;
-    
-    // Assuming 'nets' is a member of Grid that stores all the nets and their connected nodes
-    for (const auto& netPair : nets) {
-        const Net& net = netPair.second;
-        
-        // Calculate the total wirelength for this net
-        for (size_t i = 0; i < net.Nodes.size(); ++i) {
-            for (size_t j = i + 1; j < net.Nodes.size(); ++j) {
-                int dx = abs(net.Nodes[i]->getX() - net.Nodes[j]->getX());
-                int dy = abs(net.Nodes[i]->getY() - net.Nodes[j]->getY());
-                totalCost += dx + dy; // Add the Manhattan distance to the total cost
-            }
-        }
-    }
-    
-    return totalCost;
-}
-*/

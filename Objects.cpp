@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <random>
 #include <map>
 #include <cmath>
 #include "Objects.hpp"
@@ -163,11 +164,20 @@ void Grid::swap(int x1, int y1, int x2, int y2) {
 }
 
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
-    int x = 0, y = 0; // Starting coordinates for placement.
+    std::vector<Node> nodeVec;
     for (const auto& pair : nodes) {
+        nodeVec.push_back(pair.second);
+    }
 
+    // Shuffle the vector to randomize node order
+    std::random_device rd;  // Will be used to obtain a seed for the random number engine
+    std::mt19937 g(rd());   // Standard mersenne_twister_engine seeded with rd()
+    std::shuffle(nodeVec.begin(), nodeVec.end(), g);
+
+    int x = 0, y = 0; // Starting coordinates for placement.
+    for (const auto& node : nodeVec) {
         // Create a square with this node. Adjust according to your square constructor.
-        square s(squareType::Node, &pair.second); // Note: Adjust based on actual constructor and data handling.
+        square s(squareType::Node, &node); // Assuming your constructor can take a pointer to Node
         this->write(x, y, s); // Place the node on the grid.
 
         // Update coordinates for next placement, with a simple pattern for spacing.
@@ -177,7 +187,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
             y += 2;
         }
 
-        // Optional: Add checks for grid bounds if your placement pattern can exceed grid dimensions.
+        // Check for grid bounds to ensure we don't exceed grid dimensions.
         if (y >= this->grid[0].size()) {
             std::cout << "Warning: Grid is full, not all nodes have been placed." << std::endl;
             break; // Exit if we run out of grid space.

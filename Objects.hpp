@@ -80,7 +80,7 @@ private:
     utilGrid ug;
 public:
     //Grid();
-    Grid(int rows, int cols);
+    Grid(const std::map<std::string, Node>& nodes); // Updated constructor
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void initialPlacement(const std::map<std::string, Node>& nodes);

@@ -86,6 +86,8 @@ public:
     void initialPlacement(const std::map<std::string, Node>& nodes);
     int calcCost() const;
     int getCost();
+    void placeTerminals(const std::vector<Node*>& terminals);
+    void placeNonTerminals(const std::vector<Node*>& nonTerminals);
     
     friend class square;
     friend class utilGrid;

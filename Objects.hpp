@@ -85,12 +85,14 @@ private:
     utilGrid ug;
 public:
     //Grid();
-    Grid(int rows, int cols);
+    Grid(const std::map<std::string, Node>& nodes); // Updated constructor
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void initialPlacement(const std::map<std::string, Node>& nodes);
+    void placeTerminals(const std::vector<Node*>& terminals);
+    void placeNonTerminals(const std::vector<Node*>& nonTerminals);
+    
     int calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const;
-
     friend class square;
     friend class utilGrid;
 };

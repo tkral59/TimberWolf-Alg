@@ -54,6 +54,10 @@ void Node::setCoords(int x, int y) {
     ycoord = y;
 }
 
+const bool Node::isTerminal() {
+    return name[0] == 'p';
+}
+
 //SQUARE CLASS
 
 square::square() {
@@ -86,6 +90,15 @@ void square::decWires() {
 
 void square::setNode(Node* n) {
     node = n;
+}
+
+const Node* square::getNode() {
+    return node;
+}
+
+bool square::isEmpty() {
+    if (node == nullptr) return true;
+    else return false;
 }
 
 
@@ -137,6 +150,20 @@ void utilGrid::swap(int x1o, int y1o, int x2o, int y2o) {
     else cout << "Error: Trying to swap either Blank or Routing type square." << endl;
 }
 
+void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
+    int x1 = x1o * 2;
+    int x2 = x2o * 2;
+    int y1 = y1o * 2;
+    int y2 = y2o * 2;
+    if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
+        else {
+            if (grid[x2][y2].getNode() == nullptr) { grid[x2][y2] = grid[x1][y1]; }
+            else if (grid[x1][y1].getNode() == nullptr) { grid[x1][y1] = grid[x2][y2]; }
+        }
+    }
+    else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to move non-matching types." << endl;
+}
 
 //GRID CLASS
 
@@ -158,6 +185,19 @@ void Grid::write(int x, int y, square s) {
     ug.write(x * 2, y * 2, s);
 }
 
+void Grid::move(int x1, int y1, int x2, int y2) {
+    if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
+        else {
+            if (grid[x2][y2].getNode() == nullptr) { grid[x2][y2] = grid[x1][y1]; }
+            else if (grid[x1][y1].getNode() == nullptr) { grid[x1][y1] = grid[x2][y2]; }
+
+            ug.move(x1, y1, x2, y2);
+        }
+    }
+    else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to move non-matching types." << endl;
+}
+
 void Grid::swap(int x1, int y1, int x2, int y2) {
     if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if appropiate type and matching
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Swap dims outside of grid." << endl;
@@ -171,12 +211,43 @@ void Grid::swap(int x1, int y1, int x2, int y2) {
     else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to swap non-matching types." << endl;
 }
 
+void Grid::mutation(int x1, int y1) {
+    int ran = rand() % 2;
+    int rand_x = 0;
+    int rand_y = 0;
+    int ran_i = 0;
+
+    if (ran % 2 == 0) { //Even will use the swap function
+        rand_x = rand() % grid.size();
+        rand_y = rand() % grid[0].size();
+        swap(x1, y1, rand_x, rand_y);
+    }
+    else {  //Odd will use the move function
+        if (getSquare(x1, y1).getType() == squareType::Terminal) {
+            ran_i = rand() % eterms.size();
+            rand_x = eterms.at(ran_i).x;
+            rand_y = eterms.at(ran_i).y;
+            move(x1, y1, rand_x, rand_y);
+        }
+        else {
+            ran_i = rand() % enodes.size();
+            rand_x = enodes.at(ran_i).x;
+            rand_y = enodes.at(ran_i).y;
+            move(x1, y1, rand_x, rand_y);
+        }
+    }
+}
+
+square Grid::getSquare(int x, int y) {
+    return grid[x][y];
+}
+
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
-    std::vector<std::pair<std::string, Node>> terminals, nonTerminals;
+    std::vector<Node*> terminals, nonTerminals;
     // Separate terminals and non-terminals
-    for (const auto& node : nodes) {
-        if (node.second.isTerminal()) terminals.push_back(node);
-        else nonTerminals.push_back(node);
+    for (auto node : nodes) {
+        if (node.second.isTerminal()) terminals.push_back(&node.second);
+        else nonTerminals.push_back(&node.second);
     }
 
     // Shuffle terminals for random perimeter placement
@@ -187,34 +258,45 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Place terminals on the perimeter
     int perimeterCount = 0, gridSize = grid.size();
     int maxPerimeterPositions = (gridSize - 1) * 4; // Calculate available perimeter positions
-    for (const auto& terminal : terminals) {
-        if (perimeterCount < maxPerimeterPositions) {
-            // Calculate position (x,y) based on perimeterCount
-            int x = perimeterCount % (gridSize - 1);
-            int y = perimeterCount / (gridSize - 1);
-            if (y == 1) x = gridSize - 1;
-            else if (y == 2) x = gridSize - 1 - x;
-            else if (y == 3) y = gridSize - 1;
-            else y = 0;
+    int terminaliter = 0;
+    while (perimeterCount < maxPerimeterPositions) {
+        // Calculate position (x,y) based on perimeterCount
+        int x = perimeterCount % (gridSize - 1);
+        int y = perimeterCount / (gridSize - 1);
+        if (y == 1) x = gridSize - 1;
+        else if (y == 2) x = gridSize - 1 - x;
+        else if (y == 3) y = gridSize - 1;
+        else y = 0;
 
-            write(x, y, square(squareType::Terminal, &terminal.second)); // Adjust for your implementation
-            perimeterCount++;
+        if (terminaliter < terminals.size()) {
+            write(x, y, square(squareType::Terminal, terminals.at(terminaliter))); // Adjust for your implementation
+            terminaliter++;
         }
+        else {
+            write(x, y, square(squareType::Terminal, nullptr));
+            Coords ec = Coords(x, y);
+            eterms.push_back(ec);
+        }
+        perimeterCount++;
     }
 
     // Shuffle and place non-terminals within the grid's interior
     std::shuffle(nonTerminals.begin(), nonTerminals.end(), g);
-    for (const auto& nonTerminal : nonTerminals) {
-        bool placed = false;
-        for (int i = 1; i < gridSize - 1 && !placed; i++) {
-            for (int j = 1; j < gridSize - 1 && !placed; j++) {
-                if (grid[i][j].getType() == squareType::Routing) { // Assuming Routing indicates an empty spot
-                    write(i, j, square(squareType::Node, &nonTerminal.second)); // Adjust for your implementation
-                    placed = true;
-                }
+    int ntiter = 0;
+    for (int i = 1; i < gridSize - 1; i++) {
+        for (int j = 1; j < gridSize - 1; j++) {
+            if (ntiter < nonTerminals.size()) {
+                write(i, j, square(squareType::Node, nonTerminals.at(ntiter)));
+                ntiter++;
+            }
+            else { // Assuming Routing indicates an empty spot
+                write(i, j, square(squareType::Node, nullptr)); // Adjust for your implementation
+                Coords ec = Coords(i, j);
+                enodes.push_back(ec);
             }
         }
     }
+
 }
 
 void Grid::placeTerminals(const std::vector<Node*>& terminals) {
@@ -233,13 +315,16 @@ void Grid::placeTerminals(const std::vector<Node*>& terminals) {
         if (perimeterIndex < grid.size()) { // Top row
             x = perimeterIndex;
             y = 0;
-        } else if (perimeterIndex < grid.size() + grid[0].size() - 2) { // Right column
+        }
+        else if (perimeterIndex < grid.size() + grid[0].size() - 2) { // Right column
             x = grid.size() - 1;
             y = perimeterIndex - grid.size() + 1;
-        } else if (perimeterIndex < 2 * grid.size() + grid[0].size() - 4) { // Bottom row
+        }
+        else if (perimeterIndex < 2 * grid.size() + grid[0].size() - 4) { // Bottom row
             x = 2 * grid.size() + grid[0].size() - 5 - perimeterIndex;
             y = grid[0].size() - 1;
-        } else { // Left column
+        }
+        else { // Left column
             x = 0;
             y = perimeterLength - perimeterIndex;
         }
@@ -316,4 +401,23 @@ int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, 
     float tlnorm = totalLength / den; //normallized total length cost => total grid area * net count is max, min is ~ 1
     totalCost = (w1 * tlnorm) + (w2 * ocnorm);
     return totalCost;
+}
+
+Grid* Grid::tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(0, population.size() - 1);
+
+    Grid* best = nullptr;
+    float bestCost = std::numeric_limits<float>::max();
+
+    for (size_t i = 0; i < tournamentSize; ++i) {
+        Grid* candidate = population[dist(gen)];
+        float candidateCost = candidate->calcCost(w1, w2, nets, routable, wireConstraint);
+        if (routable && candidateCost < bestCost) {
+            best = candidate;
+            bestCost = candidateCost;
+        }
+    }
+    return best; // Note: This returns a pointer to an existing grid, not a new copy
 }

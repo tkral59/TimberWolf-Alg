@@ -85,6 +85,31 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 
 }
 
+void runEvolutionaryAlgorithm(std::vector<Grid*>& initialPopulation, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint) {
+    std::vector<Grid*> population = initialPopulation;
+    bool routable = true;
+    const size_t populationSize = population.size();
+    const size_t tournamentSize = 5; // Adjust based on your scenario
+
+    for (int generation = 0; generation < 100; ++generation) { // Example: 100 generations
+        std::vector<Grid*> newGeneration;
+        while (newGeneration.size() < populationSize) {
+            Grid* parent = Grid::tournamentSelection(population, tournamentSize, nets, w1, w2, wireConstraint, routable);
+            // Here, clone or mutate `parent` to create a new grid instance
+            Grid* offspring = new Grid(*parent); // Simplified: directly cloning
+            // Consider applying mutations here
+            newGeneration.push_back(offspring);
+        }
+
+        // Cleanup previous generation
+        for (auto* grid : population) delete grid;
+        population = std::move(newGeneration);
+    }
+
+    // Cleanup final generation
+    for (auto* grid : population) delete grid;
+}
+
 void createInitialGrids(map<string, Node> nodes, map<string, Net> nets) {
 	//create k random grid setups to act as first generation for timberwolf algorithm.
 }

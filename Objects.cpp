@@ -402,3 +402,22 @@ int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, 
     totalCost = (w1 * tlnorm) + (w2 * ocnorm);
     return totalCost;
 }
+
+Grid* Grid::tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(0, population.size() - 1);
+
+    Grid* best = nullptr;
+    float bestCost = std::numeric_limits<float>::max();
+
+    for (size_t i = 0; i < tournamentSize; ++i) {
+        Grid* candidate = population[dist(gen)];
+        float candidateCost = candidate->calcCost(w1, w2, nets, routable, wireConstraint);
+        if (routable && candidateCost < bestCost) {
+            best = candidate;
+            bestCost = candidateCost;
+        }
+    }
+    return best; // Note: This returns a pointer to an existing grid, not a new copy
+}

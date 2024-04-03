@@ -299,9 +299,10 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 }
 
-int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const {
+float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0;
-    vector<Bounds> bounded;
+    //vector<Bounds> bounded;
+    bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
         const Net* net = &netPair.second;
         int xmin = net->Nodes.at(0)->getX(), xmax = xmin, ymin = net->Nodes.at(0)->getX(), ymax = ymin;
@@ -344,25 +345,6 @@ int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, 
     return totalCost;
 }
 
-Grid* Grid::tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(0, population.size() - 1);
-
-    Grid* best = nullptr;
-    float bestCost = std::numeric_limits<float>::max();
-
-    for (size_t i = 0; i < tournamentSize; ++i) {
-        Grid* candidate = population[dist(gen)];
-        float candidateCost = candidate->calcCost(w1, w2, nets, routable, wireConstraint);
-        if (routable && candidateCost < bestCost) {
-            best = candidate;
-            bestCost = candidateCost;
-        }
-    }
-    return best; // Note: This returns a pointer to an existing grid, not a new copy
-}
-
 void Grid::placeNode(int x, int y, const Node* node) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[0].size()) {
         grid[x][y].setNode(node);
@@ -380,4 +362,12 @@ bool Grid::isNodePlaced(const Node* node) const {
         }
     }
     return false;
+}
+
+int Grid::getGridX() {
+    return grid.size();
+}
+
+int Grid::getGridY() {
+    return grid.at(0).size();
 }

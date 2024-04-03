@@ -58,7 +58,6 @@ private:
     squareType type;
     const Node* node;
     int wires; //count of wires
-    //Node* pins[2];
 public:
     square();
     square(squareType type, const Node* n = nullptr, int wires = 0);
@@ -101,15 +100,16 @@ public:
     void mutation(int x1, int y1);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
-    static Grid* tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable);
-    int calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const;
+    float calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    int getGridX();
+    int getGridY();
     // New methods for crossover support
     int getGridSize() const;
     void placeNode(int x, int y, const Node* node);
     bool isNodePlaced(const Node* node) const;
 
     // If you decide to make crossover a member function
-    static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
+    //static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
     friend class square;
     friend class utilGrid;
 };
@@ -118,7 +118,8 @@ struct Result {
     Grid g;
     float cost;
     bool routable;
-    Result(Grid g, float cost, bool routable) : g(g), cost(cost), routable(routable) {}
+    vector<Bounds> bounds;
+    Result(Grid g, float cost, bool routable, vector<Bounds> bounds) : g(g), cost(cost), routable(routable), bounds(bounds) {}
     Result() : cost(0), routable(false) {}
 };
 

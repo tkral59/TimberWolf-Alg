@@ -103,8 +103,15 @@ public:
     void placeTerminals(const std::vector<Node*>& terminals);
     void placeNonTerminals(const std::vector<Node*>& nonTerminals);
     square getSquare(int x, int y); //get square with coordinates
-
+    static Grid* tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable);
     int calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const;
+        // New methods for crossover support
+    int getGridSize() const;
+    void placeNode(int x, int y, Node* node);
+    bool isNodePlaced(const Node* node) const;
+
+    // If you decide to make crossover a member function
+    static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
     friend class square;
     friend class utilGrid;
 };

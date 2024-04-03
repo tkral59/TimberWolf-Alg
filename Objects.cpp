@@ -6,7 +6,7 @@
 #include <cmath>
 #include "Objects.hpp"
 #include <sstream>
-#include<random>
+#include <random>
 using namespace std;
 
 //NODE CLASS
@@ -88,7 +88,7 @@ void square::decWires() {
     wires--;
 }
 
-void square::setNode(Node* n) {
+void square::setNode(const Node* n) {
     node = n;
 }
 
@@ -299,65 +299,6 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 }
 
-void Grid::placeTerminals(const std::vector<Node*>& terminals) {
-    int perimeterIndex = 0;
-    // Calculating the perimeter's length excluding the corners twice
-    int perimeterLength = 2 * (grid.size() + grid[0].size()) - 4;
-
-    for (Node* terminal : terminals) {
-        if (perimeterIndex >= perimeterLength) {
-            std::cerr << "Error: More terminals than perimeter slots available.\n";
-            break; // Or handle this case as needed
-        }
-
-        int x, y;
-        // Translate perimeterIndex to (x, y) coordinates on the perimeter
-        if (perimeterIndex < grid.size()) { // Top row
-            x = perimeterIndex;
-            y = 0;
-        }
-        else if (perimeterIndex < grid.size() + grid[0].size() - 2) { // Right column
-            x = grid.size() - 1;
-            y = perimeterIndex - grid.size() + 1;
-        }
-        else if (perimeterIndex < 2 * grid.size() + grid[0].size() - 4) { // Bottom row
-            x = 2 * grid.size() + grid[0].size() - 5 - perimeterIndex;
-            y = grid[0].size() - 1;
-        }
-        else { // Left column
-            x = 0;
-            y = perimeterLength - perimeterIndex;
-        }
-
-        grid[y][x] = square(squareType::Terminal, terminal); // Assuming direct assignment is valid
-        perimeterIndex++;
-    }
-}
-
-void Grid::placeNonTerminals(const std::vector<Node*>& nonTerminals) {
-    std::random_device rd;
-    std::mt19937 g(rd());
-
-    // Gather all internal grid positions
-    std::vector<std::pair<int, int>> positions;
-    for (int y = 1; y < grid.size() - 1; y++) {
-        for (int x = 1; x < grid[0].size() - 1; x++) {
-            // Assuming squareType::Routing implies an empty square
-            if (grid[y][x].getType() == squareType::Routing) {
-                positions.emplace_back(x, y);
-            }
-        }
-    }
-
-    // Shuffle positions for random placement
-    std::shuffle(positions.begin(), positions.end(), g);
-
-    for (size_t i = 0; i < nonTerminals.size() && i < positions.size(); i++) {
-        int x = positions[i].first, y = positions[i].second;
-        grid[y][x] = square(squareType::Node, nonTerminals[i]); // Assuming direct assignment is valid
-    }
-}
-
 int Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0;
     vector<Bounds> bounded;
@@ -420,4 +361,23 @@ Grid* Grid::tournamentSelection(std::vector<Grid*>& population, size_t tournamen
         }
     }
     return best; // Note: This returns a pointer to an existing grid, not a new copy
+}
+
+void Grid::placeNode(int x, int y, const Node* node) {
+    if (x >= 0 && x < grid.size() && y >= 0 && y < grid[0].size()) {
+        grid[x][y].setNode(node);
+    }
+    else {
+        // Handle the error: position out of bounds
+        std::cerr << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
+    }
+}
+
+bool Grid::isNodePlaced(const Node* node) const {
+    for (vector<square> row : grid) {
+        for (auto& square : row) {
+            if (square.getNode() == node) return true;
+        }
+    }
+    return false;
 }

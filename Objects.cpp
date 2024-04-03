@@ -421,3 +421,54 @@ Grid* Grid::tournamentSelection(std::vector<Grid*>& population, size_t tournamen
     }
     return best; // Note: This returns a pointer to an existing grid, not a new copy
 }
+
+void Grid::placeNode(int x, int y, Node* node) {
+    if (x >= 0 && x < grid.size() && y >= 0 && y < grid[0].size()) {
+        grid[x][y].setNode(node);
+    } else {
+        // Handle the error: position out of bounds
+        std::cerr << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
+    }
+}
+
+bool Grid::isNodePlaced(const Node* node) const {
+    for (const auto& row : grid) {
+        for (const auto& square : row) {
+            if (square.getNode() == node) return true;
+        }
+    }
+    return false;
+}
+
+Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets) {
+    // Assume Grid has a constructor that takes the size and nets to initialize an empty grid.
+    auto child = new Grid(/* appropriate parameters */);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, parent1.getGridSize() - 1);
+
+    int crossoverPoint = dis(gen);
+
+    // Copy up to the crossover point from parent1
+    for (int i = 0; i <= crossoverPoint; ++i) {
+        for (int j = 0; j < parent1.getGridSize(); ++j) {
+            auto node = parent1.getSquare(i, j).getNode();
+            if (node && !child->isNodePlaced(node)) {
+                child->placeNode(i, j, node);
+            }
+        }
+    }
+
+    // Fill in the rest from parent2, avoiding duplicates
+    for (int i = crossoverPoint + 1; i < parent2.getGridSize(); ++i) {
+        for (int j = 0; j < parent2.getGridSize(); ++j) {
+            auto node = parent2.getSquare(i, j).getNode();
+            if (node && !child->isNodePlaced(node)) {
+                child->placeNode(i, j, node);
+            }
+        }
+    }
+
+    return child;
+}

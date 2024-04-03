@@ -101,8 +101,9 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
 		Grid g(nodes);
 		g.initialPlacement(nodes);
 		bool routable = false;
-		float cost = g.calcCost(w1, w2, nets, routable, wireConstraint);
-		Result r(g, cost, routable);
+		vector<Bounds> b;
+		float cost = g.calcCost(w1, w2, nets, routable, wireConstraint, b);
+		Result r(g, cost, routable, b);
 
 		// Save the grid configuration
 		init.push_back(r);
@@ -158,21 +159,20 @@ Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& 
 	return child;
 }
 
-void exportForVisualization(const std::map<std::string, Net>& nets, const std::string& filename) {
+void exportForVisualization(Result r, const std::string& filename) {
 	std::ofstream file(filename);
 	file << "Net,Xmin,Ymin,Xmax,Ymax\n";
-	for (const auto& netPair : nets) {
-		const Net& net = netPair.second;
+	for (auto b : r.bounds) {
 		// Assume bounds are calculated and stored somewhere accessible
-		file << net.name << "," << net.xmin << "," << net.ymin << "," << net.xmax << "," << net.ymax << "\n";
+		file << b.net->name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
 	}
 	file.close();
 }
 
-void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex) {
+void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes) {
 	for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
 		// Perform crossover on parents[i] and parents[i+1]
-		Grid* child = crossover(parents[i], parents[i + 1], nets); // Ensure your crossover function is thread-safe.
+		Grid* child = crossover(parents[i], parents[i + 1], nets, nodes); // Ensure your crossover function is thread-safe.
 
 		std::lock_guard<mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
 		offspring.push_back(child);
@@ -202,33 +202,64 @@ void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Gri
 	}
 }
 
+bool compareByFloat(const Result& a, const Result& b) { //ChatGPT
+	return a.cost > b.cost; // Change to < for ascending order
+}
 
-void perturb(std::vector<Grid*>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, map<string, Node> nodes) {
-	std::vector<Grid*> nextGeneration;
+vector<Result> tournamentSelection(std::vector<Result> population, const std::map<std::string, Net>& nets, float percentage) { //ChatGPT
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dist(0, population.size() - 1);
+
+	int topKNum = population.size() * percentage;
+	vector<Result> topFive = population;
+	sort(topFive.begin(), topFive.end(), compareByFloat);
+	auto h = topFive.begin();
+	advance(h, topKNum);
+	vector<Result> newTopFive(topFive.begin(), h);
+	return newTopFive;
+}
+
+vector<Result> perturb(std::vector<Result>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
+	std::vector<Result> nextGeneration;
 	std::random_device rd;
 	std::mt19937 gen(rd());
 
-	for (size_t i = 0; i < population.size(); ++i) {
-		bool routable = true; // Assuming this flag is needed for your cost calculation
-		// Selection
-		Grid* parent1 = Grid::tournamentSelection(population, 5, nets, w1, w2, wireConstraint, routable);
-		Grid* parent2 = Grid::tournamentSelection(population, 5, nets, w1, w2, wireConstraint, routable);
+	int count = 0; //to keep track of how many offspring created already
 
-		// Crossover - Implement your own crossover logic
-		Grid* child = crossover(parent1, parent2, nets, nodes); // You need to define how crossover works for your Grid objects
+	//Selection:
+	nextGeneration = tournamentSelection(population, nets, selectP);
+	count += nextGeneration.size();
+	//Crossover
+	int cCount = population.size() * crossP;
+	for (int i = 0; i < cCount; ++i) {
+		int i1 = rand() % count;
+		int i2 = rand() % count;
+		Grid* parent1 = &nextGeneration[i1].g;
+		Grid* parent2 = &nextGeneration[i2].g;
+		Grid* child = crossover(parent1, parent2, nets, nodes); //may be creation error here
+		bool rout = false;
+		vector<Bounds> b;
+		float cost = child->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		Result r(*child, cost, rout, b);
+		nextGeneration.push_back(r);
 
-		// Mutation
-		child->mutation(0, 0); // Apply mutation to the child
-
-		// Add the new child to the next generation
-		nextGeneration.push_back(new Grid(*child)); // Assuming deep copy is appropriate here
 	}
-
-	// Replace old generation with new generation
-	for (auto* grid : population) {
-		delete grid; // Clean up memory
+	count += cCount;
+	//Mutation
+	for (int i = count - 1; i < population.size(); i++) {
+		int in = rand() % count;
+		Grid* copy = &nextGeneration[in].g;
+		int rx = rand() % copy->getGridX();
+		int ry = rand() % copy->getGridY();
+		copy->mutation(rx, ry);
+		bool rout = false;
+		vector<Bounds> b;
+		float cost = copy->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		Result r(*copy, cost, rout, b);
+		nextGeneration.push_back(r);
 	}
-	population.swap(nextGeneration);
+	return nextGeneration;
 }
 
 double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) {
@@ -247,12 +278,14 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				//crossover
 			}
 			else {
-				int rx = rand()%; //create initial grid x param;
-				int ry = rand()%; //create initial grid y param;
 				Grid copy = r.g;
+				int rx = rand() % copy.getGridX(); //create initial grid x param;
+				int ry = rand() % copy.getGridY();//create initial grid y param;
 				copy.mutation(rx, ry);
 				bool route;
-				Result n(copy, copy.calcCost(w1, w2, nets, routable, wireConstraint), route);
+				vector<Bounds> b;
+				float cost = copy.calcCost(w1, w2, nets, routable, wireConstraint, b);
+				Result n(copy, cost, route, b);
 				e = n.cost - r.cost;
 			}
 		}
@@ -281,7 +314,7 @@ double schedule(double temp, double initialTemp) {
 	else return 0.8 * temp;
 }
 
-Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, map<string, Net> const nets, int wireConstraint) {
+Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false;
 	double t = generateInitialTemp(initialGrids, 5., w1, w2, nets, routable, wireConstraint); //initial temp
 	double initT = t;
@@ -289,10 +322,14 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 	vector<Result> new_pop;
 	vector<Result> best_pop;
 	double deltaC = 0;
+	cout << "Initial Cost: " << bestCost(population).cost << endl;
+	int iteration = 1;
 	while (t > 0) {
 		while (routable == false) {
-			new_pop = perturb(population); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+			cout << "Iteration " << iteration << "; Temp = " << t << endl;
+			new_pop = perturb(population, nets, w1, w2, wireConstraint, nodes, 0.5, 0.25, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
 			deltaC = bestCost(new_pop).cost - bestCost(population).cost; //NEED BEST COST FUNCTION
+			cout << "\t Delta C = " << deltaC << endl;
 
 			// for exploration
 			random_device rd;
@@ -306,6 +343,7 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 			if (deltaC < 0) {
 				population = new_pop;
 				best_pop = new_pop;
+				cout << "\t \t new best population!" << endl;
 			}
 
 			//chance to explore
@@ -344,4 +382,6 @@ void main() {
 
 	read(netfile, nodefile, nodes, nets, numNet, numPins, numNode, numTerminals);
 	//simulatedAnnealing();
+	vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
+	simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);
 }

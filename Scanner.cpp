@@ -85,6 +85,30 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 
 }
 
+void runEvolutionaryAlgorithm(std::vector<Grid*>& initialPopulation, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint) {
+    std::vector<Grid*> population = initialPopulation;
+    bool routable = true;
+    const size_t populationSize = population.size();
+    const size_t tournamentSize = 5; // Adjust based on your scenario
+
+    for (int generation = 0; generation < 100; ++generation) { // Example: 100 generations
+        std::vector<Grid*> newGeneration;
+        while (newGeneration.size() < populationSize) {
+            Grid* parent = Grid::tournamentSelection(population, tournamentSize, nets, w1, w2, wireConstraint, routable);
+            // Here, clone or mutate `parent` to create a new grid instance
+            Grid* offspring = new Grid(*parent); // Simplified: directly cloning
+            // Consider applying mutations here
+            newGeneration.push_back(offspring);
+        }
+
+        // Cleanup previous generation
+        for (auto* grid : population) delete grid;
+        population = std::move(newGeneration);
+    }
+
+    // Cleanup final generation
+    for (auto* grid : population) delete grid;
+}
 
 
 void perturb(std::vector<Grid*>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint) {
@@ -162,41 +186,6 @@ void exportForVisualization(const std::map<std::string, Net>& nets, const std::s
     }
     file.close();
 }
-
-void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex) {
-    for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
-        // Perform crossover on parents[i] and parents[i+1]
-        Grid* child = crossover(parents[i], parents[i + 1], nets); // Ensure your crossover function is thread-safe.
-        
-        std::lock_guard<std::mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
-        offspring.push_back(child);
-    }
-}
-
-
-void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, unsigned int numThreads) {
-    std::vector<std::thread> threads;
-    std::mutex offspringMutex; // Protects access to the offspring vector.
-    
-    int segmentSize = parents.size() / numThreads; // Determine workload size per thread.
-    
-    for (unsigned int i = 0; i < numThreads; ++i) {
-        int startIdx = i * segmentSize;
-        int endIdx = (i == numThreads - 1) ? parents.size() : (i + 1) * segmentSize; // Ensure the last thread covers any remaining parents.
-        
-        // Launch a thread to process its segment of the parents vector.
-        threads.emplace_back(performCrossoversThread, std::ref(offspring), std::ref(parents), std::ref(nets), startIdx, endIdx, std::ref(offspringMutex));
-    }
-
-    // Wait for all threads to complete their tasks.
-    for (std::thread& t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-}
-
-
 /*
 void main() {
 	string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
@@ -211,8 +200,5 @@ void main() {
 			cout << "\t" << node->getName() << endl;
 		}
 	}
-	 
-    // Now call the multithreaded crossover instead of the single-threaded version
-    multithreadedCrossover(offspring, selectedParents, nets, std::thread::hardware_concurrency());
 }
 */

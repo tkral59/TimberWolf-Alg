@@ -14,7 +14,10 @@ struct Net {
     Net() = default; // Enable default construction
     std::string name; // Name of the net
     std::vector<Node*> Nodes; // Pointers to Nodes connected to this net
+    int weight;
+    bool isCritical;
     Net(const std::string& name) : name(name) {}
+
 };
 
 struct Coords {
@@ -32,6 +35,7 @@ private:
     std::string name;
     std::vector<Net*> nets; //required forward declaration
     int xcoord, ycoord;
+    int weight;
 
 public:
     Node();
@@ -45,6 +49,8 @@ public:
     std::string getName() const;
     void setCoords(int x, int y);
     const bool isTerminal();
+    int getWeight();
+    void setWeight(int w);
 };
 
 enum class squareType {

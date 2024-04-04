@@ -14,7 +14,7 @@
 
 using namespace std;
 
-void read(const string netfile, const string nodefile, map<string, Node>& nodes, map<string, Net>& nets, int& numNets, int& numPins, int& numNodes, int& numTerminals) {
+void read(const string netfile, const string nodefile, const string wtsfile, map<string, Node>& nodes, map<string, Net>& nets, int& numNets, int& numPins, int& numNodes, int& numTerminals) {
 	nodes.clear();
 	nets.clear();
 
@@ -84,9 +84,58 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 				}
 			}
 		}
+		myFile.close();
 	}
 	else cout << "Failed to open net file." << endl;
 
+	myFile.open(wtsfile);
+	iter = 0;
+	if (myFile.is_open()) {
+		while (getline(myFile, line)) {
+			if (iter < 5) {
+				iter++;
+				continue;
+			}
+			else {
+				vector<string> words;
+				string temp;
+				stringstream ss(line);
+
+				while (ss >> temp) {
+					words.push_back(temp); //delimits string into words by spaces
+				}
+
+				nodes[words[0]].setWeight(stoi(words[1]));
+				for (auto net : nodes[words[0]].getNets()) {
+					net->weight += stoi(words[1]);
+				}
+
+			}
+		}
+		myFile.close();
+	}
+	else cout << "Failed to open weights file." << endl;
+}
+
+bool sortByValueDescending(const std::pair<string, Net>& a, const std::pair<string, Net>& b) {//ChatGPT
+	return a.second.weight > b.second.weight;
+}
+
+void findTop10Percent(const std::map<string, Net>& inputMap) {//ChatGPT
+	// Calculate the number of elements that constitute the top 10%
+	int top10PercentSize = inputMap.size() * 0.1;
+
+	// Convert the map to a vector of pairs for sorting
+	std::vector<std::pair<string, Net>> vec(inputMap.begin(), inputMap.end());
+
+	// Sort the vector by value in descending order
+	std::sort(vec.begin(), vec.end(), sortByValueDescending);
+
+	// Output the top 10% elements
+	std::cout << "Top 10% elements:" << std::endl;
+	for (int i = 0; i < top10PercentSize; ++i) {
+		vec[i].second.isCritical = true;
+	}
 }
 
 vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, map<string, Net> const nets, int wireConstraint) {
@@ -374,13 +423,14 @@ void main() {
 */
 
 void main() {
-	string netfile = "";
-	string nodefile = "";
+	string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
+	string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
+	string wtsfile = "P2Benchmarks\\ibm01\\ibm01.wts";
 	map<string, Node> nodes;
 	map<string, Net> nets;
 	int numNet, numPins, numNode, numTerminals;
 
-	read(netfile, nodefile, nodes, nets, numNet, numPins, numNode, numTerminals);
+	read(netfile, nodefile, wtsfile, nodes, nets, numNet, numPins, numNode, numTerminals);
 	//simulatedAnnealing();
 	vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
 	simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);

@@ -58,6 +58,14 @@ const bool Node::isTerminal() {
     return name[0] == 'p';
 }
 
+int Node::getWeight() {
+    return weight;
+}
+
+void Node::setWeight(int w) {
+    weight = w;
+}
+
 //SQUARE CLASS
 
 square::square() {
@@ -304,7 +312,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 }
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
-    float totalCost = 0, totalLength = 0, overlapCount = 0;
+    float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
@@ -320,10 +328,15 @@ float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets
             if (x > xmax) xmax = x;
             if (y < ymin) ymin = y;
             if (y > ymax) ymax = y;
+
             totalLength = abs(xmax - xmin) + abs(ymax - ymin);
+            if (net->isCritical) critCost += totalLength / 2; //if the net is critical then add additional cost equivlent to 1/2 net length
+
             newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = net;
         }
         bounded.push_back(newBounds);
+
+        //calculated overlap of nets
         int olcount = 0;
         for (Bounds const bounds : bounded) {
             if (bounds.net->name != netPair.first) {

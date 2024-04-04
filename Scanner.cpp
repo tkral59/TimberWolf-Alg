@@ -5,7 +5,11 @@
 #include <map>
 #include <random>
 #include <set>
+#include <cmath>
+#include <thread>
+#include <mutex>
 #include "Objects.hpp"
+//#include "Scanner.hpp"
 #include <sstream> // Add this at the top of Scanner.cpp
 
 using namespace std;
@@ -84,108 +88,111 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 	else cout << "Failed to open net file." << endl;
 
 }
+vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, map<string, Net> const nets, int wireConstraint) {
 
-
-
-void perturb(std::vector<Grid*>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint) {
-    std::vector<Grid*> nextGeneration;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    for (size_t i = 0; i < population.size(); ++i) {
-        bool routable = true; // Assuming this flag is needed for your cost calculation
-        // Selection
-        Grid* parent1 = Grid::tournamentSelection(population, 5, nets, w1, w2, wireConstraint, routable);
-        Grid* parent2 = Grid::tournamentSelection(population, 5, nets, w1, w2, wireConstraint, routable);
-
-        // Crossover - Implement your own crossover logic
-        Grid* child = crossover(parent1, parent2); // You need to define how crossover works for your Grid objects
-
-        // Mutation
-        child->mutation(); // Apply mutation to the child
-
-        // Add the new child to the next generation
-        nextGeneration.push_back(new Grid(*child)); // Assuming deep copy is appropriate here
-    }
-
-    // Replace old generation with new generation
-    for (auto* grid : population) {
-        delete grid; // Clean up memory
-    }
-    population.swap(nextGeneration);
-}
-
-
-void createInitialGrids(const std::map<std::string, Node>& nodes, std::vector<Grid*>& gridConfigurations, int k) {
-
-    int gridSize = std::ceil(std::sqrt(nodes.size())) * 1.1; // Adjust the scaling factor as necessary
-
+    vector<Result> init;
     std::random_device rd;
     std::mt19937 g(rd());
 
     for (int i = 0; i < k; ++i) {
-        Grid* grid = new Grid(nodes); // Using your Grid constructor that takes nodes
-
-        // Clear existing placement if needed (assuming such a method exists)
-        grid->clear(); // Make sure you implement this in Grid to reset its state
-
-        std::vector<Node*> terminals, nonTerminals;
-        for (const auto& pair : nodes) {
-            if (pair.second.isTerminal())
-                terminals.push_back(const_cast<Node*>(&pair.second)); // Unsafe, but needed for example. Better to adjust your design to avoid const_cast.
-            else
-                nonTerminals.push_back(const_cast<Node*>(&pair.second));
-        }
-
-        // Shuffle for random placement
-        std::shuffle(nonTerminals.begin(), nonTerminals.end(), g);
-        std::shuffle(terminals.begin(), terminals.end(), g);
-
-        // Place terminals and non-terminals using your defined methods
-        // These methods need to be defined in your Grid class to handle the placement logic
-        grid->placeTerminals(terminals);
-        grid->placeNonTerminals(nonTerminals);
-
-        // Save the grid configuration
-        gridConfigurations.push_back(grid);
-    }
-}
-
-// Part of your finalization or analysis function
-void exportForVisualization(const std::map<std::string, Net>& nets, const std::string& filename) {
-    std::ofstream file(filename);
-    file << "Net,Xmin,Ymin,Xmax,Ymax\n";
-    for (const auto& netPair : nets) {
-        const Net& net = netPair.second;
-        // Assume bounds are calculated and stored somewhere accessible
-        file << net.name << "," << net.xmin << "," << net.ymin << "," << net.xmax << "," << net.ymax << "\n";
-    }
-    file.close();
-}
-
-void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex) {
-    for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
-        // Perform crossover on parents[i] and parents[i+1]
-        Grid* child = crossover(parents[i], parents[i + 1], nets); // Ensure your crossover function is thread-safe.
+        Grid grid(nodes); // Directly construct Grid object
+        grid.initialPlacement(nodes);
+        bool routable = false;
+        vector<Bounds> bounds;
+        float cost = grid.calcCost(w1, w2, nets, routable, wireConstraint, bounds);
         
-        std::lock_guard<std::mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
-        offspring.push_back(child);
+        // Use std::move to move the Grid object into the Result, avoiding unnecessary copies
+        init.emplace_back(std::move(grid), cost, routable, std::move(bounds));
     }
+
+    return init; // Don't forget to return the populated vector
 }
 
 
-void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, unsigned int numThreads) {
-    std::vector<std::thread> threads;
-    std::mutex offspringMutex; // Protects access to the offspring vector.
-    
+Result bestCost(vector<Result> results) {
+	Result best;
+	double mincost = results.at(0).cost;
+	if (results.at(0).routable) return results.at(0);
+	for (int i = 1; i < results.size(); i++) {
+		if (results.at(i).routable) {
+			return results.at(i);
+		}
+		else if (results.at(i).cost < mincost) {
+			mincost = results.at(i).cost;
+			best = results.at(i);
+		}
+	}
+	return best;
+}
+
+Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& nets, map<string, Node> nodes) {
+	// Assume Grid has a constructor that takes the size and nets to initialize an empty grid.
+	auto child = new Grid(nodes);
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dis(0, parent1->getGridSize() - 1);
+
+	int crossoverPoint = dis(gen);
+
+	// Copy up to the crossover point from parent1
+	for (int i = 0; i <= crossoverPoint; ++i) {
+		for (int j = 0; j < parent1->getGridSize(); ++j) {
+			auto node = parent1->getSquare(i, j).getNode();
+			if (node && !child->isNodePlaced(node)) {
+				child->placeNode(i, j, node);
+			}
+		}
+	}
+
+	// Fill in the rest from parent2, avoiding duplicates
+	for (int i = crossoverPoint + 1; i < parent2->getGridSize(); ++i) {
+		for (int j = 0; j < parent2->getGridSize(); ++j) {
+			auto node = parent2->getSquare(i, j).getNode();
+			if (node && !child->isNodePlaced(node)) {
+				child->placeNode(i, j, node);
+			}
+		}
+	}
+
+	return child;
+}
+
+void exportForVisualization(Result r, const std::string& filename) {
+	std::ofstream file(filename);
+	file << "Net,Xmin,Ymin,Xmax,Ymax\n";
+	for (auto b : r.bounds) {
+		// Assume bounds are calculated and stored somewhere accessible
+		file << b.net->name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
+	}
+	file.close();
+}
+
+void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes) {
+	for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
+		// Perform crossover on parents[i] and parents[i+1]
+		Grid* child = crossover(parents[i], parents[i + 1], nets, nodes); // Ensure your crossover function is thread-safe.
+
+		std::lock_guard<mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
+		offspring.push_back(child);
+	}
+}
+
+
+void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, unsigned int numThreads, std::map<string, Node> nodes) {
+    vector<thread> threads;
+    mutex offspringMutex; // Protects access to the offspring vector.
+
     int segmentSize = parents.size() / numThreads; // Determine workload size per thread.
-    
+
     for (unsigned int i = 0; i < numThreads; ++i) {
         int startIdx = i * segmentSize;
         int endIdx = (i == numThreads - 1) ? parents.size() : (i + 1) * segmentSize; // Ensure the last thread covers any remaining parents.
-        
-        // Launch a thread to process its segment of the parents vector.
-        threads.emplace_back(performCrossoversThread, std::ref(offspring), std::ref(parents), std::ref(nets), startIdx, endIdx, std::ref(offspringMutex));
+
+        // Launch a thread to process its segment of the parents vector using a lambda to capture the necessary variables.
+        threads.emplace_back([&, startIdx, endIdx, i]() {
+            performCrossoversThread(offspring, parents, nets, startIdx, endIdx, offspringMutex, nodes);
+        });
     }
 
     // Wait for all threads to complete their tasks.
@@ -194,6 +201,196 @@ void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Gri
             t.join();
         }
     }
+}
+
+
+bool compareByFloat(const Result& a, const Result& b) { //ChatGPT
+	return a.cost > b.cost; // Change to < for ascending order
+}
+
+vector<Result> tournamentSelection(std::vector<Result> population, const std::map<std::string, Net>& nets, float percentage) { //ChatGPT
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dist(0, population.size() - 1);
+
+	int topKNum = population.size() * percentage;
+	vector<Result> topFive = population;
+	sort(topFive.begin(), topFive.end(), compareByFloat);
+	auto h = topFive.begin();
+	advance(h, topKNum);
+	vector<Result> newTopFive(topFive.begin(), h);
+	return newTopFive;
+}
+
+vector<Result> perturb(std::vector<Result>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
+	std::vector<Result> nextGeneration;
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	int count = 0; //to keep track of how many offspring created already
+
+	//Selection:
+	nextGeneration = tournamentSelection(population, nets, selectP);
+	count += nextGeneration.size();
+	//Crossover
+	int cCount = population.size() * crossP;
+	for (int i = 0; i < cCount; ++i) {
+		int i1 = rand() % count;
+		int i2 = rand() % count;
+		Grid* parent1 = &nextGeneration[i1].g;
+		Grid* parent2 = &nextGeneration[i2].g;
+		Grid* child = crossover(parent1, parent2, nets, nodes); //may be creation error here
+		bool rout = false;
+		vector<Bounds> b;
+		float cost = child->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		Result r(*child, cost, rout, b);
+		nextGeneration.push_back(r);
+
+	}
+	count += cCount;
+	//Mutation
+	for (int i = count - 1; i < population.size(); i++) {
+		int in = rand() % count;
+		Grid* copy = &nextGeneration[in].g;
+		int rx = rand() % copy->getGridX();
+		int ry = rand() % copy->getGridY();
+		copy->mutation(rx, ry);
+		bool rout = false;
+		vector<Bounds> b;
+		float cost = copy->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		Result r(*copy, cost, rout, b);
+		nextGeneration.push_back(r);
+	}
+	return nextGeneration;
+}
+
+double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) {
+	double emax = 0., emin = 0.;
+	double esum = 0;
+	vector<double> es;
+	for (Result r : init) {
+		double e = 0.;
+		while (e <= 0.) { //get an positive transition
+			int ra = rand() % 3;
+			int ri = rand() % init.size();
+			if (ra <= 1) { //select
+				e = r.cost - init.at(ri).cost;
+			}
+			else if (ra == 2) {
+				//crossover
+			}
+			else {
+				Grid copy = r.g;
+				int rx = rand() % copy.getGridX(); //create initial grid x param;
+				int ry = rand() % copy.getGridY();//create initial grid y param;
+				copy.mutation(rx, ry);
+				bool route;
+				vector<Bounds> b;
+				float cost = copy.calcCost(w1, w2, nets, routable, wireConstraint, b);
+				Result n(copy, cost, route, b);
+				e = n.cost - r.cost;
+			}
+		}
+		es.push_back(e);
+		esum += e;
+	}
+	auto emaxit = max_element(es.begin(), es.end());
+	auto eminit = min_element(es.begin(), es.end());
+	emax = *emaxit;
+	emin = *eminit;
+	double t = emax;
+	double xo = 0.8;
+	double x = 0.;
+	while (x < xo) {
+		x = exp(-(emax / t)) / exp(-(emin / t));
+		t = t * pow((log(x) / log(xo)), (1. / prob));
+	}
+	return t;
+}
+
+double schedule(double temp, double initialTemp) {
+	double percentComplete = (initialTemp - temp) / initialTemp;
+	if (percentComplete < 0.8 || percentComplete > 0.92) {
+		return 0.95 * temp;
+	}
+	else return 0.8 * temp;
+}
+
+Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
+	bool routable = false;
+	double t = generateInitialTemp(initialGrids, 5., w1, w2, nets, routable, wireConstraint); //initial temp
+	double initT = t;
+	vector<Result> population = initialGrids;
+	vector<Result> new_pop;
+	vector<Result> best_pop;
+	double deltaC = 0;
+	cout << "Initial Cost: " << bestCost(population).cost << endl;
+	int iteration = 1;
+	while (t > 0) {
+		while (routable == false) {
+			cout << "Iteration " << iteration << "; Temp = " << t << endl;
+			new_pop = perturb(population, nets, w1, w2, wireConstraint, nodes, 0.5, 0.25, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+			deltaC = bestCost(new_pop).cost - bestCost(population).cost; //NEED BEST COST FUNCTION
+			cout << "\t Delta C = " << deltaC << endl;
+
+			// for exploration
+			random_device rd;
+			mt19937 gen(rd()); //seed;
+			uniform_real_distribution<double> dis(0.0, 1.0);
+			double r = dis(gen);
+			double e = exp(deltaC / t);
+			//end exploration parameters
+
+			//if better cost, exploit
+			if (deltaC < 0) {
+				population = new_pop;
+				best_pop = new_pop;
+				cout << "\t \t new best population!" << endl;
+			}
+
+			//chance to explore
+			else if (r > e) {
+				population = new_pop;
+			}
+			t = schedule(t, initT);
+		}
+	}
+	return bestCost(best_pop);
+}
+
+void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& nets, int wireConstraint, float initialTemperature = 100.0f, int totalSteps = 10000) {
+    srand(static_cast<unsigned>(time(nullptr))); // Seed the RNG
+
+    float temperature = initialTemperature;
+    Grid currentGrid = initialGrid;
+    bool routable;
+    std::vector<Bounds> bounds;
+    float currentCost = currentGrid.calcCost(1.0, 1.0, nets, routable, wireConstraint, bounds);
+
+    Grid bestGrid = currentGrid;
+    float bestCost = currentCost;
+
+    for (int step = 0; step < totalSteps && temperature > 1e-3; ++step) {
+        Grid newGrid = currentGrid; // Create a new candidate by copying the current grid
+        newGrid.mutation(rand() % newGrid.getGridX(), rand() % newGrid.getGridY()); // Apply mutation
+
+        float newCost = newGrid.calcCost(1.0, 1.0, nets, routable, wireConstraint, bounds); // Calculate the new cost
+
+        if ((newCost < currentCost) || (exp((currentCost - newCost) / temperature) > static_cast<float>(rand()) / RAND_MAX)) {
+            currentGrid = newGrid;
+            currentCost = newCost;
+
+            if (newCost < bestCost) {
+                bestGrid = newGrid;
+                bestCost = newCost;
+            }
+        }
+
+        // Update temperature based on a simple cooling schedule
+        temperature *= 0.95;
+    }
+
+    // bestGrid now contains the optimized grid configuration
 }
 
 
@@ -211,8 +408,37 @@ void main() {
 			cout << "\t" << node->getName() << endl;
 		}
 	}
-	 
-    // Now call the multithreaded crossover instead of the single-threaded version
-    multithreadedCrossover(offspring, selectedParents, nets, std::thread::hardware_concurrency());
 }
 */
+
+int main() {
+    // Paths to your net and node files need to be specified here
+    std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets"; // Update with the actual path to your net file
+    std::string nodefile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nodes"; // Update with the actual path to your node file
+
+    // Containers for nodes and nets populated by the read function
+    std::map<std::string, Node> nodes;
+    std::map<std::string, Net> nets;
+    int numNet = 0, numPins = 0, numNode = 0, numTerminals = 0;
+
+    // Reading node and net data from files
+    read(netfile, nodefile, nodes, nets, numNet, numPins, numNode, numTerminals);
+
+    // Generating initial grid configurations for optimization
+    std::vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
+
+    // Executing the simulated annealing optimization process
+    simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);
+
+    // Following the optimization, you might want to output the optimized results
+    // This section is left generic since the specifics depend on your Result structure and desired outputs
+    std::cout << "Optimization completed. Displaying results:" << std::endl;
+    // Example: Displaying the cost of the best result
+    if (!init.empty()) {
+        std::cout << "Best cost: " << init.front().cost << std::endl;
+    } else {
+        std::cout << "No results available." << std::endl;
+    }
+
+    return 0; // Ensure to return an integer type for main()
+}

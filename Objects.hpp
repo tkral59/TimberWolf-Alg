@@ -104,7 +104,7 @@ public:
     int getGridX();
     int getGridY();
     // New methods for crossover support
-    int getGridSize() const;
+    //int getGridSize() const;
     void placeNode(int x, int y, const Node* node);
     bool isNodePlaced(const Node* node) const;
 

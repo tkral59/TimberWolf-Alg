@@ -167,6 +167,10 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 
 //GRID CLASS
 
+
+Grid::Grid() {
+
+}
 // Adjust Grid constructor to automatically calculate dimensions and perform initial placement
 Grid::Grid(const std::map<std::string, Node>& nodes) {
     int totalNodes = nodes.size();
@@ -364,10 +368,10 @@ bool Grid::isNodePlaced(const Node* node) const {
     return false;
 }
 
-int Grid::getGridX() {
+int Grid::getGridY() {
     return grid.size();
 }
 
-int Grid::getGridY() {
+int Grid::getGridX() {
     return grid.at(0).size();
 }

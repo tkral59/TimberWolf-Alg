@@ -108,6 +108,7 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
 		// Save the grid configuration
 		init.push_back(r);
 	}
+	return init;
 }
 
 Result bestCost(vector<Result> results) {
@@ -132,13 +133,13 @@ Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& 
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dis(0, parent1->getGridSize() - 1);
+	std::uniform_int_distribution<> dis(0, parent1->getGridY() - 1);
 
 	int crossoverPoint = dis(gen);
 
 	// Copy up to the crossover point from parent1
 	for (int i = 0; i <= crossoverPoint; ++i) {
-		for (int j = 0; j < parent1->getGridSize(); ++j) {
+		for (int j = 0; j < parent1->getGridX(); ++j) {
 			auto node = parent1->getSquare(i, j).getNode();
 			if (node && !child->isNodePlaced(node)) {
 				child->placeNode(i, j, node);
@@ -147,15 +148,14 @@ Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& 
 	}
 
 	// Fill in the rest from parent2, avoiding duplicates
-	for (int i = crossoverPoint + 1; i < parent2->getGridSize(); ++i) {
-		for (int j = 0; j < parent2->getGridSize(); ++j) {
+	for (int i = crossoverPoint + 1; i < parent2->getGridY(); ++i) {
+		for (int j = 0; j < parent2->getGridX(); ++j) {
 			auto node = parent2->getSquare(i, j).getNode();
 			if (node && !child->isNodePlaced(node)) {
 				child->placeNode(i, j, node);
 			}
 		}
 	}
-
 	return child;
 }
 
@@ -168,7 +168,7 @@ void exportForVisualization(Result r, const std::string& filename) {
 	}
 	file.close();
 }
-
+/*
 void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes) {
 	for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
 		// Perform crossover on parents[i] and parents[i+1]
@@ -201,7 +201,7 @@ void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Gri
 		}
 	}
 }
-
+*/
 bool compareByFloat(const Result& a, const Result& b) { //ChatGPT
 	return a.cost > b.cost; // Change to < for ascending order
 }
@@ -282,7 +282,7 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				int rx = rand() % copy.getGridX(); //create initial grid x param;
 				int ry = rand() % copy.getGridY();//create initial grid y param;
 				copy.mutation(rx, ry);
-				bool route;
+				bool route = false;
 				vector<Bounds> b;
 				float cost = copy.calcCost(w1, w2, nets, routable, wireConstraint, b);
 				Result n(copy, cost, route, b);

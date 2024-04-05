@@ -299,57 +299,64 @@ square Grid::getSquare(int x, int y) {
 */
 
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
-    // Scaling factors remain the same
+    // Containers for terminals by edge
+    std::vector<Node*> topEdge, bottomEdge, leftEdge, rightEdge;
+
+    // Assuming maxX and maxY have been determined from the .pl file
     int maxX = 0, maxY = 0;
-    for (const auto& node : nodes) {
-        maxX = std::max(maxX, node.second.getX());
-        maxY = std::max(maxY, node.second.getY());
-    }
-    
-    double scaleX = static_cast<double>(grid.size() - 1) / maxX;
-    double scaleY = static_cast<double>(grid[0].size() - 1) / maxY;
-
-    // Adjustments for even perimeter distribution
-    int totalPerimeterPositions = 2 * (grid.size() + grid[0].size() - 2);
-    int terminalStep = totalPerimeterPositions / (nodes.size() + 1); // +1 to avoid division by zero
-    int perimeterPosition = 0;
-
-    for (const auto& node : nodes) {
-        if (node.second.isTerminal()) {
-            // Calculate perimeter position for the terminal
-            int pos = perimeterPosition * terminalStep;
-            int edgeX, edgeY;
-            if (pos < grid.size()) { // Top edge
-                edgeX = pos; edgeY = 0;
-            } else if (pos < grid.size() + grid[0].size() - 1) { // Right edge
-                edgeX = grid.size() - 1; edgeY = pos - grid.size() + 1;
-            } else if (pos < 2 * grid.size() + grid[0].size() - 2) { // Bottom edge
-                edgeX = 2 * grid.size() + grid[0].size() - 3 - pos; edgeY = grid[0].size() - 1;
-            } else { // Left edge
-                edgeX = 0; edgeY = totalPerimeterPositions - pos;
-            }
-
-            // Place the terminal at the calculated perimeter position
-            write(edgeX, edgeY, square(squareType::Terminal, &node.second));
-            perimeterPosition++;
+    for (const auto& [name, node] : nodes) {
+        maxX = std::max(maxX, node.x);
+        maxY = std::max(maxY, node.y);
+        if (node.isTerminal) {
+            // Determine the edge for each terminal
+            if (node.y == maxY) topEdge.push_back(const_cast<Node*>(&node)); // Top edge
+            else if (node.y == 0) bottomEdge.push_back(const_cast<Node*>(&node)); // Bottom edge
+            else if (node.x == 0) leftEdge.push_back(const_cast<Node*>(&node)); // Left edge
+            else if (node.x == maxX) rightEdge.push_back(const_cast<Node*>(&node)); // Right edge
         }
     }
-    // Sequentially place non-terminal nodes in the remaining spaces
-    for (const auto& node : nodes) {
-        if (!node.second.isTerminal()) {
-            // Find an empty space for the non-terminal node
+
+    // Helper function to evenly place terminals on their edge
+    auto distributeTerminals = [&](std::vector<Node*>& edgeTerminals, char edge) {
+        int numTerminals = edgeTerminals.size();
+        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1) 
+                                                    : grid.size() / (numTerminals + 1);
+
+        for (int i = 0; i < numTerminals; ++i) {
+            int pos = (i + 1) * spacing;
+            int x = 0, y = 0;
+            switch (edge) {
+                case 't': x = pos; y = 0; break;
+                case 'b': x = pos; y = grid.size() - 1; break;
+                case 'l': x = 0; y = pos; break;
+                case 'r': x = grid[0].size() - 1; y = pos; break;
+            }
+            write(x, y, square(squareType::Terminal, edgeTerminals[i]));
+        }
+    };
+
+    // Evenly distribute terminals along each edge
+    distributeTerminals(topEdge, 't');
+    distributeTerminals(bottomEdge, 'b');
+    distributeTerminals(leftEdge, 'l');
+    distributeTerminals(rightEdge, 'r');
+
+    // Sequentially place non-terminal nodes in the first available spot
+    for (const auto& [name, node] : nodes) {
+        if (!node.isTerminal) {
             for (int i = 0; i < grid.size(); ++i) {
                 for (int j = 0; j < grid[0].size(); ++j) {
-                    if (grid[i][j].getType() == squareType::Routing) { // Assuming Routing type means the space is empty
-                        write(i, j, square(squareType::Node, &node.second));
-                        goto nextNode;
+                    if (grid[i][j].getType() == squareType::Routing) { // Assuming Routing means empty
+                        write(i, j, square(squareType::Node, const_cast<Node*>(&node)));
+                        goto nextNode; // Proceed to the next node after placement
                     }
                 }
             }
-            nextNode:;
         }
+        nextNode: ; // Label to continue with the next non-terminal node
     }
 }
+
 
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {

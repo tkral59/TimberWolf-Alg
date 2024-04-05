@@ -18,7 +18,6 @@ struct Net {
     int nodesSize;
     bool isCritical;
     Net(const std::string& name, int w = 0) : name(name), nodesSize(w) {}
-    float weight;
 
 };
 

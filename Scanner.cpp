@@ -141,92 +141,6 @@ bool isNumeric(const std::string& str) {
 	return !str.empty() && std::all_of(str.begin(), str.end(), [](char c) { return std::isdigit(c) || c == '-'; });
 }
 
-void readPLFileAndUpdateNodes(const std::string& filename, std::map<std::string, Node>& nodes) {
-	std::ifstream plFile(filename);
-	if (!plFile.is_open()) {
-		std::cerr << "Error: Unable to open file '" << filename << "' for reading." << std::endl;
-		return;
-	}
-
-	std::string line;
-	while (std::getline(plFile, line)) {
-		std::istringstream iss(line);
-		std::string nodeName, xStr, yStr;
-
-		if (!(iss >> nodeName >> xStr >> yStr)) {
-			// Malformed line, skipping
-			continue;
-		}
-
-		// Attempt to convert xStr and yStr to integers
-		try {
-			int x = std::stoi(xStr);
-			int y = std::stoi(yStr);
-
-			// Check if nodeName exists in the nodes map and update positions
-			auto it = nodes.find(nodeName);
-			if (it != nodes.end()) {
-				it->second.setXY(x, y);
-			}
-			else {
-				std::cerr << "Node '" << nodeName << "' not found in the nodes map." << std::endl;
-			}
-		}
-		catch (const std::invalid_argument& ia) {
-			std::cerr << "Invalid argument for stoi while processing PL file line: " << line << std::endl;
-		}
-		catch (const std::out_of_range& oor) {
-			std::cerr << "Out of range error for stoi while processing PL file line: " << line << std::endl;
-		}
-	}
-
-	std::cout << "PL file '" << filename << "' has been successfully processed." << std::endl;
-}
-
-
-void parseWtsFile(const std::string& filename, std::map<std::string, Node>& nodes, std::map<std::string, Net>& nets) {
-	std::ifstream file(filename);
-	std::string line;
-
-	if (!file.is_open()) {
-		std::cerr << "Error: Unable to open file '" << filename << "' for reading." << std::endl;
-		return;
-	}
-
-	while (std::getline(file, line)) {
-		// Skip empty lines and comments
-		if (line.empty() || line[0] == '#') continue;
-
-		std::istringstream iss(line);
-		std::string itemName;
-		float weight;
-
-		// Assuming the format is a bit relaxed about whitespace and uses tab/space indents
-		iss >> std::ws; // Eat up any leading whitespace
-		if (!(iss >> itemName >> weight)) {
-			std::cerr << "Skipping malformed line: " << line << std::endl;
-			continue;
-		}
-
-		// Attempt to update the weight in both nodes and nets
-		auto nodeIt = nodes.find(itemName);
-		if (nodeIt != nodes.end()) {
-			nodeIt->second.weight = weight;
-		}
-		else {
-			// If not found in nodes, try updating nets
-			auto netIt = nets.find(itemName);
-			if (netIt != nets.end()) {
-				netIt->second.weight = weight;
-			}
-			else {
-				std::cerr << "Warning: Item '" << itemName << "' not found in nodes or nets. Line: " << line << std::endl;
-			}
-		}
-	}
-
-	std::cout << "Weight file '" << filename << "' has been successfully processed." << std::endl;
-}
 
 vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, map<string, Net> const nets, int wireConstraint) {
 	vector<Result> init;
@@ -539,7 +453,6 @@ int main() {
 
 	try {
 		read(netfile, nodefile, plfile, nodes, nets, numNet, numPins, numNode, numTerminals);
-		readPLFileAndUpdateNodes(plfile, nodes);
 
 		std::vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
 		Result bestResult = simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);

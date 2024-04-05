@@ -14,15 +14,18 @@ struct Net {
     Net() = default; // Enable default construction
     std::string name; // Name of the net
     std::vector<Node*> Nodes; // Pointers to Nodes connected to this net
-    int weight;
+    int nodesSize;
     bool isCritical;
-    Net(const std::string& name) : name(name) {}
+    Net(const std::string& name, int w = 0) : name(name) {}
 
 };
 
 struct Coords {
     int x, y;
     Coords(int x, int y) : x(x), y(y) {}
+    bool operator==(const Coords& other) const {//ChatGPT
+        return x == other.x && y == other.y;
+    }
 };
 
 struct Bounds {
@@ -34,23 +37,20 @@ class Node {
 private:
     std::string name;
     std::vector<Net*> nets; //required forward declaration
-    int xcoord, ycoord;
-    int weight;
+    int x, y;
 
 public:
     Node();
     Node(std::string name, std::vector<Net*> nets, int xcoord = 0, int ycoord = 0);
     ~Node();
-    int getX() const { return xcoord; }
-    int getY() const { return ycoord; }
+    int getX() const { return x; }
+    int getY() const { return y; }
+    void setXY(int x, int y);
     std::vector<Net*> getNets() const;
     void addNet(Net* net);
     void removeNet(Net* net);
     std::string getName() const;
-    void setCoords(int x, int y);
     const bool isTerminal();
-    int getWeight();
-    void setWeight(int w);
 };
 
 enum class squareType {
@@ -95,7 +95,7 @@ class Grid {
 private:
     vector<vector<square>> grid;
     utilGrid ug;
-    vector<Coords> enodes; //bounds of empty nodes in grid
+    vector<Coords> enodes; //coords of empty nodes in grid
     vector<Coords> eterms;
 public:
     Grid();
@@ -109,6 +109,7 @@ public:
     float calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
     int getGridX();
     int getGridY();
+    void updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal);
     // New methods for crossover support
     //int getGridSize() const;
     void placeNode(int x, int y, const Node* node);

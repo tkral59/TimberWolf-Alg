@@ -14,7 +14,7 @@
 
 using namespace std;
 
-void read(const string netfile, const string nodefile, const string wtsfile, map<string, Node>& nodes, map<string, Net>& nets, int& numNets, int& numPins, int& numNodes, int& numTerminals) {
+void read(const string netfile, const string nodefile, const string plfile, map<string, Node>& nodes, map<string, Net>& nets, int& numNets, int& numPins, int& numNodes, int& numTerminals) {
 	nodes.clear();
 	nets.clear();
 
@@ -76,10 +76,13 @@ void read(const string netfile, const string nodefile, const string wtsfile, map
 				else if (words[0] == "NetDegree") {
 					Net newnet("n" + to_string(netcount));
 					nets[newnet.name] = newnet;
+					nets[newnet.name].isCritical = false;
+
 					netcount++;
 				}
 				else {
 					nets["n" + to_string(netcount - 1)].Nodes.push_back(&nodes[words[0]]);
+					nets["n" + to_string(netcount - 1)].nodesSize++;
 					nodes[words[0]].addNet(&nets["n" + to_string(netcount - 1)]);
 				}
 			}
@@ -88,11 +91,12 @@ void read(const string netfile, const string nodefile, const string wtsfile, map
 	}
 	else cout << "Failed to open net file." << endl;
 
-	myFile.open(wtsfile);
+	//read plfile
+	myFile.open(plfile);
 	iter = 0;
 	if (myFile.is_open()) {
 		while (getline(myFile, line)) {
-			if (iter < 5) {
+			if (iter < 6) {
 				iter++;
 				continue;
 			}
@@ -101,6 +105,38 @@ void read(const string netfile, const string nodefile, const string wtsfile, map
 				string temp;
 				stringstream ss(line);
 
+				while (ss >> temp) {
+					words.push_back(temp); //delimits string into words by spaces
+				}
+
+				nodes[words[0]].setXY(stoi(words[1]), stoi(words[2]));
+
+			}
+		}
+		myFile.close();
+	}
+}
+
+bool sortByValueDescending(const std::pair<string, Net>& a, const std::pair<string, Net>& b) {//ChatGPT
+	return a.second.nodesSize > b.second.nodesSize;
+  }
+
+void findTop10Percent(const std::map<string, Net>& inputMap) {//ChatGPT
+	// Calculate the number of elements that constitute the top 10%
+	int top10PercentSize = inputMap.size() * 0.1;
+
+	// Convert the map to a vector of pairs for sorting
+	std::vector<std::pair<string, Net>> vec(inputMap.begin(), inputMap.end());
+
+	// Sort the vector by value in descending order
+	std::sort(vec.begin(), vec.end(), sortByValueDescending);
+
+	// Output the top 10% elements
+	std::cout << "Top 10% elements:" << std::endl;
+	for (int i = 0; i < top10PercentSize; ++i) {
+		vec[i].second.isCritical = true;
+	}
+}
 void readPLFileAndUpdateNodes(const std::string& filename, std::map<std::string, Node>& nodes) {
     std::ifstream plFile(filename);
 
@@ -145,8 +181,7 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
     std::mt19937 g(rd());
 
     for (int i = 0; i < k; ++i) {
-        Grid grid(nodes); // Directly construct Grid object
-        grid.initialPlacement(nodes);
+        Grid g(nodes);
         bool routable = false;
         vector<Bounds> bounds;
         float cost = grid.calcCost(w1, w2, nets, routable, wireConstraint, bounds);
@@ -154,7 +189,6 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
         // Use std::move to move the Grid object into the Result, avoiding unnecessary copies
         init.emplace_back(std::move(grid), cost, routable, std::move(bounds));
     }
-
     return init; // Don't forget to return the populated vector
 }
 
@@ -594,7 +628,7 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 void main() {
 	string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
 	string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
-	string wtsfile = "P2Benchmarks\\ibm01\\ibm01.wts";
+	string plfile = "P2Benchmarks\\ibm01\\ibm01.pl";
 	map<string, Node> nodes;
 	map<string, Net> nets;
 	int numNet, numPins, numNode, numTerminals;

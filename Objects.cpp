@@ -15,16 +15,15 @@ Node::Node() {
     name = "";
     vector<Net*> netlist;
     nets = netlist;
-    xcoord = 0;
-    ycoord = 0;
+    x = 0;
+    y = 0;
 }
 Node::Node(string name, vector<Net*> nets, int xcoord, int ycoord) {
     this->name = name;
     this->nets = nets;
-    this->xcoord = xcoord;
-    this->ycoord = ycoord;
+    this->x = xcoord;
+    this->y = ycoord;
 }
-
 Node::~Node() {
     // Cleanup if needed
 }
@@ -33,6 +32,11 @@ std::vector<Net*> Node::getNets() const {
 }
 void Node::addNet(Net* net) {
     nets.push_back(net);
+}
+
+void Node::setXY(int x, int y) {
+    x = x;
+    y = y;
 }
 
 void Node::removeNet(Net* net) {
@@ -49,10 +53,6 @@ string Node::getName() const {
     return this->name;
 }
 
-void Node::setCoords(int x, int y) {
-    xcoord = x;
-    ycoord = y;
-}
 
 const bool Node::isTerminal() {
     return name[0] == 'p';
@@ -108,7 +108,7 @@ utilGrid::utilGrid() {
 
 }
 
-utilGrid::utilGrid(vector<vector<square>> ogrid) {
+utilGrid::utilGrid(vector<vector<square>> ogrid) {//chatGPT aided
     int n = ogrid.size();
     std::vector<vector<square>> spacedMatrix(2 * n - 1, vector<square>(2 * n - 1));
 
@@ -194,12 +194,33 @@ void Grid::write(int x, int y, square s) {
     }
 }
 
+void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
+    Coords a(x2, y2);
+    Coords b(x1, y1);
+    if (isTerminal) {
+        eterms.push_back(a);
+        auto it = find(eterms.begin(), eterms.end(), b);
+        eterms.erase(it);
+    }
+    else {
+        enodes.push_back(a);
+        auto it = find(enodes.begin(), enodes.end(), b);
+        enodes.erase(it);
+    }
+}
+
 void Grid::move(int x1, int y1, int x2, int y2) {
     if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
         else {
-            if (grid[x2][y2].getNode() == nullptr) { grid[x2][y2] = grid[x1][y1]; }
-            else if (grid[x1][y1].getNode() == nullptr) { grid[x1][y1] = grid[x2][y2]; }
+            if (grid[x2][y2].getNode() == nullptr) {
+                grid[x2][y2] = grid[x1][y1];
+                updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
+            }
+            else if (grid[x1][y1].getNode() == nullptr) {
+                grid[x1][y1] = grid[x2][y2];
+                updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
+            }
 
             ug.move(x1, y1, x2, y2);
         }
@@ -251,8 +272,6 @@ square Grid::getSquare(int x, int y) {
     return grid[x][y];
 }
 
-
-
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Adjust the coordinate system to start from 0,0 if minimum is -33.
     int coordinateShift = 33; // Assuming -33 is the minimum coordinate.
@@ -260,15 +279,15 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Containers for edge terminals.
     std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge;
     // For random placement
-    std::mt19937 rng{std::random_device{}()};
+    std::mt19937 rng{ std::random_device{}() };
     std::set<std::pair<int, int>> occupiedPositions;
 
-    for (const auto& pair : nodes) {
-        const auto& node = pair.second;
+    for (auto pair : nodes) {
+        Node& node = pair.second;
         int adjustedX = node.getX() + coordinateShift;
         int adjustedY = node.getY() + coordinateShift;
         maxX = std::max(maxX, adjustedX);
-        maxY = std::max(maxY, adjustedY); 
+        maxY = std::max(maxY, adjustedY);
 
         if (node.isTerminal()) { // Corrected to use function call syntax
             // Determine the edge for each terminal using getters
@@ -281,8 +300,8 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
     auto distributeTerminals = [&](const std::vector<const Node*>& edgeTerminals, char edge) {
         int numTerminals = edgeTerminals.size();
-        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1) 
-                                                    : grid.size() / (numTerminals + 1);
+        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1)
+            : grid.size() / (numTerminals + 1);
         for (int i = 0; i < numTerminals; ++i) {
             int pos = (i + 1) * spacing;
             int x = 0, y = 0;
@@ -299,20 +318,20 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     distributeTerminals(leftEdge, 'l');
     distributeTerminals(rightEdge, 'r');
 
-  // Place non-terminal nodes randomly
+    // Place non-terminal nodes randomly
     std::uniform_int_distribution<int> distX(0, grid.size() - 1), distY(0, grid[0].size() - 1);
 
-    for (const auto& pair : nodes) {
-        const auto& node = pair.second;
+    for (auto pair : nodes) {
+        auto& node = pair.second;
         if (!node.isTerminal()) {
             bool placed = false;
             while (!placed) {
                 int randomX = distX(rng);
                 int randomY = distY(rng);
-                if (occupiedPositions.find({randomX, randomY}) == occupiedPositions.end()) {
+                if (occupiedPositions.find({ randomX, randomY }) == occupiedPositions.end()) {
                     // If position is not occupied, place the node
                     write(randomX, randomY, square(squareType::Node, &node));
-                    occupiedPositions.insert({randomX, randomY});
+                    occupiedPositions.insert({ randomX, randomY });
                     placed = true;
                 }
             }
@@ -320,9 +339,6 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     }
 }
 
-
-float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
-    float totalCost = 0, totalLength = 0, overlapCount = 0;
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;

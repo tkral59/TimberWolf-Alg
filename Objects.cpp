@@ -167,6 +167,9 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 
 //GRID CLASS
 
+Grid::Grid() {
+
+}
 // Adjust Grid constructor to automatically calculate dimensions and perform initial placement
 Grid::Grid(const std::map<std::string, Node>& nodes) {
     int totalNodes = nodes.size();
@@ -190,7 +193,6 @@ void Grid::write(int x, int y, square s) {
         // Handle out-of-bounds access appropriately
     }
 }
-
 
 void Grid::move(int x1, int y1, int x2, int y2) {
     if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
@@ -249,54 +251,7 @@ square Grid::getSquare(int x, int y) {
     return grid[x][y];
 }
 
-/*void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
-    // Find the scaling factors based on the grid size and maximum coordinates in the .pl file.
-    int maxX = 0, maxY = 0;
-    for (const auto& node : nodes) {
-        maxX = std::max(maxX, node.second.getX());
-        maxY = std::max(maxY, node.second.getY());
-    }
-    
-    double scaleX = static_cast<double>(grid.size() - 1) / maxX;
-    double scaleY = static_cast<double>(grid[0].size() - 1) / maxY;
 
-    // Place terminal nodes on the perimeter based on their scaled coordinates.
-    for (const auto& node : nodes) {
-        if (node.second.isTerminal()) {
-            // Scale the node's coordinates
-            int gridX = static_cast<int>(std::round(node.second.getX() * scaleX));
-            int gridY = static_cast<int>(std::round(node.second.getY() * scaleY));
-
-            // Determine the closest edge for each terminal node
-            int edgeX = gridX, edgeY = gridY;
-            if (gridX <= gridY && gridX <= grid.size() - 1 - gridX) edgeY = 0; // Left edge
-            else if (gridY <= gridX && gridY <= grid[0].size() - 1 - gridY) edgeX = 0; // Top edge
-            else if (grid.size() - 1 - gridX < gridY) edgeY = grid[0].size() - 1; // Right edge
-            else edgeX = grid.size() - 1; // Bottom edge
-
-            // Place the terminal on the closest edge
-            write(edgeX, edgeY, square(squareType::Terminal, &node.second));
-        }
-    }
-
-    // Sequentially place non-terminal nodes in the remaining spaces
-    for (const auto& node : nodes) {
-        if (!node.second.isTerminal()) {
-            // Find an empty space for the non-terminal node
-            for (int i = 0; i < grid.size(); ++i) {
-                for (int j = 0; j < grid[0].size(); ++j) {
-                    if (grid[i][j].getType() == squareType::Routing) { // Assuming Routing type means the space is empty
-                        write(i, j, square(squareType::Node, &node.second));
-                        goto nextNode;
-                    }
-                }
-            }
-            nextNode:;
-        }
-    }
-    
-}
-*/
 
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Adjust the coordinate system to start from 0,0 if minimum is -33.
@@ -368,6 +323,10 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0;
+
+float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
+    float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
+
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
@@ -383,10 +342,15 @@ float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets
             if (x > xmax) xmax = x;
             if (y < ymin) ymin = y;
             if (y > ymax) ymax = y;
+
             totalLength = abs(xmax - xmin) + abs(ymax - ymin);
+            if (net->isCritical) critCost += totalLength / 2; //if the net is critical then add additional cost equivlent to 1/2 net length
+
             newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = net;
         }
         bounded.push_back(newBounds);
+
+        //calculated overlap of nets
         int olcount = 0;
         for (Bounds const bounds : bounded) {
             if (bounds.net->name != netPair.first) {
@@ -431,13 +395,10 @@ bool Grid::isNodePlaced(const Node* node) const {
     return false;
 }
 
-int Grid::getGridX() {
+int Grid::getGridY() {
     return grid.size();
 }
 
-int Grid::getGridY() {
+int Grid::getGridX() {
     return grid.at(0).size();
-}
-int Grid::getGridSize() const {
-    return grid.size(); // Assuming 'grid' is a container like std::vector
 }

@@ -322,9 +322,6 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
-    float totalCost = 0, totalLength = 0, overlapCount = 0;
-
-float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
 
     //vector<Bounds> bounded;

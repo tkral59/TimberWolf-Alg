@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include<memory>
 #ifndef DATASTRUCTURES_HPP
 #define DATASTRUCTURES_HPP
 using namespace std;
@@ -35,6 +36,9 @@ private:
 
 public:
     Node();
+    std::string name;
+    int x = 0, y = 0;
+    bool isTerminal = false;
     Node(std::string name, std::vector<Net*> nets, int xcoord = 0, int ycoord = 0);
     ~Node();
     int getX() const { return xcoord; }
@@ -58,7 +62,6 @@ private:
     squareType type;
     const Node* node;
     int wires; //count of wires
-    //Node* pins[2];
 public:
     square();
     square(squareType type, const Node* n = nullptr, int wires = 0);
@@ -66,7 +69,7 @@ public:
     squareType getType();
     void incWires(); //increment wire count if wire type
     void decWires(); //dec if wire type
-    void setNode(Node* n); //set node if terminal or gate
+    void setNode(const Node* n); //set node if terminal or gate
     const Node* getNode();
     bool isEmpty();
 
@@ -93,27 +96,34 @@ private:
     vector<Coords> enodes; //bounds of empty nodes in grid
     vector<Coords> eterms;
 public:
-    //Grid();
+    Grid()= default;
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void move(int x1, int y1, int x2, int y2);
     void mutation(int x1, int y1);
     void initialPlacement(const std::map<std::string, Node>& nodes);
-    void placeTerminals(const std::vector<Node*>& terminals);
-    void placeNonTerminals(const std::vector<Node*>& nonTerminals);
     square getSquare(int x, int y); //get square with coordinates
-    static Grid* tournamentSelection(std::vector<Grid*>& population, size_t tournamentSize, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, bool& routable);
-    int calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) const;
-        // New methods for crossover support
+    float calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    int getGridX();
+    int getGridY();
+    // New methods for crossover support
     int getGridSize() const;
-    void placeNode(int x, int y, Node* node);
+    void placeNode(int x, int y, const Node* node);
     bool isNodePlaced(const Node* node) const;
 
     // If you decide to make crossover a member function
-    static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
+    //static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
     friend class square;
     friend class utilGrid;
+};
+struct Result {
+    Grid g;
+    float cost;
+    bool routable;
+    vector<Bounds> bounds;
+    Result(Grid g, float cost, bool routable, vector<Bounds> bounds) : g(g), cost(cost), routable(routable), bounds(bounds) {}
+    Result() : cost(0), routable(false) {}
 };
 
 #endif // DATASTRUCTURES_HPP

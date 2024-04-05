@@ -58,14 +58,6 @@ const bool Node::isTerminal() {
     return name[0] == 'p';
 }
 
-int Node::getWeight() {
-    return weight;
-}
-
-void Node::setWeight(int w) {
-    weight = w;
-}
-
 //SQUARE CLASS
 
 square::square() {
@@ -175,7 +167,6 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 
 //GRID CLASS
 
-
 Grid::Grid() {
 
 }
@@ -193,8 +184,14 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
 }
 
 void Grid::write(int x, int y, square s) {
-    grid[x][y] = s;
-    ug.write(x * 2, y * 2, s);
+    if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
+        grid[x][y] = s;
+        if (2*x < ug.grid.size() && 2*y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
+            ug.write(x * 2, y * 2, s);
+        }
+    } else {
+        // Handle out-of-bounds access appropriately
+    }
 }
 
 void Grid::move(int x1, int y1, int x2, int y2) {
@@ -254,65 +251,82 @@ square Grid::getSquare(int x, int y) {
     return grid[x][y];
 }
 
+
+
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
-    std::vector<Node*> terminals, nonTerminals;
-    // Separate terminals and non-terminals
-    for (auto node : nodes) {
-        if (node.second.isTerminal()) terminals.push_back(&node.second);
-        else nonTerminals.push_back(&node.second);
+    // Adjust the coordinate system to start from 0,0 if minimum is -33.
+    int coordinateShift = 33; // Assuming -33 is the minimum coordinate.
+    int maxX = 0, maxY = 0;
+    // Containers for edge terminals.
+    std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge;
+    // For random placement
+    std::mt19937 rng{std::random_device{}()};
+    std::set<std::pair<int, int>> occupiedPositions;
+
+    for (const auto& pair : nodes) {
+        const auto& node = pair.second;
+        int adjustedX = node.getX() + coordinateShift;
+        int adjustedY = node.getY() + coordinateShift;
+        maxX = std::max(maxX, adjustedX);
+        maxY = std::max(maxY, adjustedY); 
+
+        if (node.isTerminal()) { // Corrected to use function call syntax
+            // Determine the edge for each terminal using getters
+            if (node.getY() == maxY) topEdge.push_back(&node); // Top edge
+            else if (node.getY() == 0) bottomEdge.push_back(&node); // Bottom edge
+            else if (node.getX() == 0) leftEdge.push_back(&node); // Left edge
+            else if (node.getX() == maxX) rightEdge.push_back(&node); // Right edge
+        }
     }
 
-    // Shuffle terminals for random perimeter placement
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(terminals.begin(), terminals.end(), g);
-
-    // Place terminals on the perimeter
-    int perimeterCount = 0, gridSize = grid.size();
-    int maxPerimeterPositions = (gridSize - 1) * 4; // Calculate available perimeter positions
-    int terminaliter = 0;
-    while (perimeterCount < maxPerimeterPositions) {
-        // Calculate position (x,y) based on perimeterCount
-        int x = perimeterCount % (gridSize - 1);
-        int y = perimeterCount / (gridSize - 1);
-        if (y == 1) x = gridSize - 1;
-        else if (y == 2) x = gridSize - 1 - x;
-        else if (y == 3) y = gridSize - 1;
-        else y = 0;
-
-        if (terminaliter < terminals.size()) {
-            write(x, y, square(squareType::Terminal, terminals.at(terminaliter))); // Adjust for your implementation
-            terminaliter++;
+    auto distributeTerminals = [&](const std::vector<const Node*>& edgeTerminals, char edge) {
+        int numTerminals = edgeTerminals.size();
+        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1) 
+                                                    : grid.size() / (numTerminals + 1);
+        for (int i = 0; i < numTerminals; ++i) {
+            int pos = (i + 1) * spacing;
+            int x = 0, y = 0;
+            if (edge == 't') { x = pos; y = 0; }
+            else if (edge == 'b') { x = pos; y = grid.size() - 1; }
+            else if (edge == 'l') { x = 0; y = pos; }
+            else if (edge == 'r') { x = grid[0].size() - 1; y = pos; }
+            write(x, y, square(squareType::Terminal, edgeTerminals[i]));
         }
-        else {
-            write(x, y, square(squareType::Terminal, nullptr));
-            Coords ec = Coords(x, y);
-            eterms.push_back(ec);
-        }
-        perimeterCount++;
-    }
+    };
 
-    // Shuffle and place non-terminals within the grid's interior
-    std::shuffle(nonTerminals.begin(), nonTerminals.end(), g);
-    int ntiter = 0;
-    for (int i = 1; i < gridSize - 1; i++) {
-        for (int j = 1; j < gridSize - 1; j++) {
-            if (ntiter < nonTerminals.size()) {
-                write(i, j, square(squareType::Node, nonTerminals.at(ntiter)));
-                ntiter++;
+    distributeTerminals(topEdge, 't');
+    distributeTerminals(bottomEdge, 'b');
+    distributeTerminals(leftEdge, 'l');
+    distributeTerminals(rightEdge, 'r');
+
+  // Place non-terminal nodes randomly
+    std::uniform_int_distribution<int> distX(0, grid.size() - 1), distY(0, grid[0].size() - 1);
+
+    for (const auto& pair : nodes) {
+        const auto& node = pair.second;
+        if (!node.isTerminal()) {
+            bool placed = false;
+            while (!placed) {
+                int randomX = distX(rng);
+                int randomY = distY(rng);
+                if (occupiedPositions.find({randomX, randomY}) == occupiedPositions.end()) {
+                    // If position is not occupied, place the node
+                    write(randomX, randomY, square(squareType::Node, &node));
+                    occupiedPositions.insert({randomX, randomY});
+                    placed = true;
+                }
             }
-            else { // Assuming Routing indicates an empty spot
-                write(i, j, square(squareType::Node, nullptr)); // Adjust for your implementation
-                Coords ec = Coords(i, j);
-                enodes.push_back(ec);
-            }
         }
     }
-
 }
+
+
+float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
+    float totalCost = 0, totalLength = 0, overlapCount = 0;
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
+
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects

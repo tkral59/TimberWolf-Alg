@@ -88,6 +88,44 @@ void read(const string netfile, const string nodefile, map<string, Node>& nodes,
 	else cout << "Failed to open net file." << endl;
 
 }
+
+void readPLFileAndUpdateNodes(const std::string& filename, std::map<std::string, Node>& nodes) {
+    std::ifstream plFile(filename);
+
+    // Directly check if the file is open and readable
+    if (!plFile.is_open()) {
+        std::cerr << "Error: .pl file '" << filename << "' does not exist or cannot be opened." << std::endl;
+        return;  // Stop processing if the file couldn't be opened
+    }
+
+    std::string line;
+    while (getline(plFile, line)) {
+        if (line.empty() || line[0] == '#' || line.find("UCLA") != std::string::npos) continue; // Skip comments and headers
+
+        std::istringstream iss(line);
+        std::string nodeName, temp;
+        int x, y;
+        if (iss >> nodeName >> x >> y >> temp) { // Assuming 'temp' captures any trailing attributes, which are ignored here
+            // Check if nodeName exists in the nodes map and update positions
+            auto it = nodes.find(nodeName);
+            if (it != nodes.end()) {
+                it->second.x = x;
+                it->second.y = y;
+                // Optionally, mark node as terminal based on additional logic
+                it->second.isTerminal = true; // Example, adjust as needed
+            } else {
+                // If the nodeName does not exist in the map, you might want to add it,
+                // Or handle it depending on your application's needs
+                // nodes[nodeName] = Node(nodeName, x, y, true); // Example, adjust as needed
+            }
+        }
+    }
+
+    // Confirm successful reading:
+    std::cout << "Successfully read and processed '" << filename << "'." << std::endl;
+}
+
+
 vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, map<string, Net> const nets, int wireConstraint) {
 
     vector<Result> init;
@@ -414,7 +452,13 @@ void main() {
 int main() {
     // Paths to your net and node files need to be specified here
     std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets"; // Update with the actual path to your net file
-    std::string nodefile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nodes"; // Update with the actual path to your node file
+    std::string nodefile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nodes";
+	std::string filename = "path/to/your/file.pl";
+    std::map<std::string, Node> nodes;
+
+    // Attempt to read the .pl file and update node positions
+    readPLFileAndUpdateNodes(filename, nodes);
+ // Update with the actual path to your node file
 
     // Containers for nodes and nets populated by the read function
     std::map<std::string, Node> nodes;

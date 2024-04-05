@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include<memory>
 #ifndef DATASTRUCTURES_HPP
 #define DATASTRUCTURES_HPP
 using namespace std;
@@ -41,6 +42,9 @@ private:
 
 public:
     Node();
+    std::string name;
+    int x = 0, y = 0;
+    bool isTerminal = false;
     Node(std::string name, std::vector<Net*> nets, int xcoord = 0, int ycoord = 0);
     ~Node();
     int getX() const { return x; }
@@ -98,7 +102,7 @@ private:
     vector<Coords> enodes; //coords of empty nodes in grid
     vector<Coords> eterms;
 public:
-    Grid();
+    Grid()= default;
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
@@ -119,6 +123,14 @@ public:
     //static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
     friend class square;
     friend class utilGrid;
+};
+struct Result {
+    Grid g;
+    float cost;
+    bool routable;
+    vector<Bounds> bounds;
+    Result(Grid g, float cost, bool routable, vector<Bounds> bounds) : g(g), cost(cost), routable(routable), bounds(bounds) {}
+    Result() : cost(0), routable(false) {}
 };
 
 struct Result {

@@ -167,7 +167,6 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 
 //GRID CLASS
 
-
 Grid::Grid() {
 
 }
@@ -185,8 +184,14 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
 }
 
 void Grid::write(int x, int y, square s) {
-    grid[x][y] = s;
-    ug.write(x * 2, y * 2, s);
+    if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
+        grid[x][y] = s;
+        if (2*x < ug.grid.size() && 2*y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
+            ug.write(x * 2, y * 2, s);
+        }
+    } else {
+        // Handle out-of-bounds access appropriately
+    }
 }
 
 void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
@@ -337,6 +342,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
+
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects

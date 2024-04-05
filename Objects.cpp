@@ -18,11 +18,13 @@ Node::Node() {
     x = 0;
     y = 0;
 }
-Node::Node(string name, vector<Net*> nets, int xcoord, int ycoord) {
+
+Node::Node(string name, vector<Net*> nets, int x, int y, bool isTerminal) {
     this->name = name;
     this->nets = nets;
-    this->x = xcoord;
-    this->y = ycoord;
+    this->x = x;  // Corrected from xcoord
+    this->y = y;  // Corrected from ycoord
+    this->isTerminalFlag = isTerminal;  // Assuming you have a member variable isTerminalFlag
 }
 Node::~Node() {
     // Cleanup if needed
@@ -34,9 +36,16 @@ void Node::addNet(Net* net) {
     nets.push_back(net);
 }
 
-void Node::setXY(int x, int y) {
-    x = x;
-    y = y;
+int Node::getX() const {
+    return x; // Assuming 'x' is an integer member variable of Node
+}
+
+int Node::getY() const {
+    return y; // Assuming 'y' is an integer member variable of Node
+}
+void Node::setXY(int newX, int newY) {
+    this->x = newX;
+    this->y = newY;
 }
 
 void Node::removeNet(Net* net) {
@@ -54,9 +63,14 @@ string Node::getName() const {
 }
 
 
-const bool Node::isTerminal() {
+bool Node::isTerminal() const {
     return name[0] == 'p';
 }
+
+void Node::setTerminal(bool terminal) {
+    this->isTerminalFlag = terminal;
+}
+
 
 //SQUARE CLASS
 
@@ -168,7 +182,7 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 //GRID CLASS
 
 Grid::Grid() {
-
+    // Initialization or other actions
 }
 // Adjust Grid constructor to automatically calculate dimensions and perform initial placement
 Grid::Grid(const std::map<std::string, Node>& nodes) {
@@ -186,10 +200,11 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
 void Grid::write(int x, int y, square s) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
         grid[x][y] = s;
-        if (2*x < ug.grid.size() && 2*y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
+        if (2 * x < ug.grid.size() && 2 * y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
             ug.write(x * 2, y * 2, s);
         }
-    } else {
+    }
+    else {
         // Handle out-of-bounds access appropriately
     }
 }
@@ -275,26 +290,44 @@ square Grid::getSquare(int x, int y) {
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Adjust the coordinate system to start from 0,0 if minimum is -33.
     int coordinateShift = 33; // Assuming -33 is the minimum coordinate.
-    int maxX = 0, maxY = 0;
+    int maxX = 0, maxY = 0, minX = 0, minY = 0;
     // Containers for edge terminals.
-    std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge;
+    std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge, isTerminal;
     // For random placement
     std::mt19937 rng{ std::random_device{}() };
     std::set<std::pair<int, int>> occupiedPositions;
 
     for (auto pair : nodes) {
-        Node& node = pair.second;
-        int adjustedX = node.getX() + coordinateShift;
-        int adjustedY = node.getY() + coordinateShift;
-        maxX = std::max(maxX, adjustedX);
-        maxY = std::max(maxY, adjustedY);
+        if (pair.second.isTerminal()) {
+            isTerminal.push_back(&nodes.at(pair.first));
+        }
+    }
 
+    auto maxElementX = max_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {//ChatGPT "how to find a max struct in a vector by its int value"
+        return a->getX() < b->getX();
+        });
+    maxX = (*maxElementX)->getX();
+    auto maxElementY = max_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getY() < b->getY();
+        });
+    maxY = (*maxElementY)->getY();
+    auto minElementX = min_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getX() < b->getX();
+        });
+    minX = (*minElementX)->getX();
+    auto minElementY = min_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getY() < b->getY();
+        });
+    minY = (*minElementY)->getY();
+
+    for (auto pair : nodes) {
+        Node& node = pair.second;
         if (node.isTerminal()) { // Corrected to use function call syntax
             // Determine the edge for each terminal using getters
-            if (node.getY() == maxY) topEdge.push_back(&node); // Top edge
-            else if (node.getY() == 0) bottomEdge.push_back(&node); // Bottom edge
-            else if (node.getX() == 0) leftEdge.push_back(&node); // Left edge
-            else if (node.getX() == maxX) rightEdge.push_back(&node); // Right edge
+            if (node.getY() == maxY) topEdge.push_back(&nodes.at(pair.first)); // Top edge
+            else if (node.getY() == minY) bottomEdge.push_back(&nodes.at(pair.first)); // Bottom edge
+            else if (node.getX() == minX) leftEdge.push_back(&nodes.at(pair.first)); // Left edge
+            else if (node.getX() == maxX) rightEdge.push_back(&nodes.at(pair.first)); // Right edge
         }
     }
 

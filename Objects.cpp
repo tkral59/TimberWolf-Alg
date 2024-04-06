@@ -15,16 +15,17 @@ Node::Node() {
     name = "";
     vector<Net*> netlist;
     nets = netlist;
-    xcoord = 0;
-    ycoord = 0;
-}
-Node::Node(string name, vector<Net*> nets, int xcoord, int ycoord) {
-    this->name = name;
-    this->nets = nets;
-    this->xcoord = xcoord;
-    this->ycoord = ycoord;
+    x = 0;
+    y = 0;
 }
 
+Node::Node(string name, vector<Net*> nets, int x, int y, bool isTerminal) {
+    this->name = name;
+    this->nets = nets;
+    this->x = x;  // Corrected from xcoord
+    this->y = y;  // Corrected from ycoord
+    this->isTerminalFlag = isTerminal;  // Assuming you have a member variable isTerminalFlag
+}
 Node::~Node() {
     // Cleanup if needed
 }
@@ -33,6 +34,18 @@ std::vector<Net*> Node::getNets() const {
 }
 void Node::addNet(Net* net) {
     nets.push_back(net);
+}
+
+int Node::getX() const {
+    return x; // Assuming 'x' is an integer member variable of Node
+}
+
+int Node::getY() const {
+    return y; // Assuming 'y' is an integer member variable of Node
+}
+void Node::setXY(int newX, int newY) {
+    this->x = newX;
+    this->y = newY;
 }
 
 void Node::removeNet(Net* net) {
@@ -49,14 +62,15 @@ string Node::getName() const {
     return this->name;
 }
 
-void Node::setCoords(int x, int y) {
-    xcoord = x;
-    ycoord = y;
-}
 
-const bool Node::isTerminal() {
+bool Node::isTerminal() const {
     return name[0] == 'p';
 }
+
+void Node::setTerminal(bool terminal) {
+    this->isTerminalFlag = terminal;
+}
+
 
 //SQUARE CLASS
 
@@ -108,7 +122,7 @@ utilGrid::utilGrid() {
 
 }
 
-utilGrid::utilGrid(vector<vector<square>> ogrid) {
+utilGrid::utilGrid(vector<vector<square>> ogrid) {//chatGPT aided
     int n = ogrid.size();
     std::vector<vector<square>> spacedMatrix(2 * n - 1, vector<square>(2 * n - 1));
 
@@ -168,7 +182,7 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
 //GRID CLASS
 
 Grid::Grid() {
-
+    // Initialization or other actions
 }
 // Adjust Grid constructor to automatically calculate dimensions and perform initial placement
 Grid::Grid(const std::map<std::string, Node>& nodes) {
@@ -186,11 +200,27 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
 void Grid::write(int x, int y, square s) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
         grid[x][y] = s;
-        if (2*x < ug.grid.size() && 2*y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
+        if (2 * x < ug.grid.size() && 2 * y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
             ug.write(x * 2, y * 2, s);
         }
-    } else {
+    }
+    else {
         // Handle out-of-bounds access appropriately
+    }
+}
+
+void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
+    Coords a(x2, y2);
+    Coords b(x1, y1);
+    if (isTerminal) {
+        eterms.push_back(a);
+        auto it = find(eterms.begin(), eterms.end(), b);
+        eterms.erase(it);
+    }
+    else {
+        enodes.push_back(a);
+        auto it = find(enodes.begin(), enodes.end(), b);
+        enodes.erase(it);
     }
 }
 
@@ -198,8 +228,14 @@ void Grid::move(int x1, int y1, int x2, int y2) {
     if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
         else {
-            if (grid[x2][y2].getNode() == nullptr) { grid[x2][y2] = grid[x1][y1]; }
-            else if (grid[x1][y1].getNode() == nullptr) { grid[x1][y1] = grid[x2][y2]; }
+            if (grid[x2][y2].getNode() == nullptr) {
+                grid[x2][y2] = grid[x1][y1];
+                updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
+            }
+            else if (grid[x1][y1].getNode() == nullptr) {
+                grid[x1][y1] = grid[x2][y2];
+                updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
+            }
 
             ug.move(x1, y1, x2, y2);
         }
@@ -251,38 +287,54 @@ square Grid::getSquare(int x, int y) {
     return grid[x][y];
 }
 
-
-
 void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     // Adjust the coordinate system to start from 0,0 if minimum is -33.
     int coordinateShift = 33; // Assuming -33 is the minimum coordinate.
-    int maxX = 0, maxY = 0;
+    int maxX = 0, maxY = 0, minX = 0, minY = 0;
     // Containers for edge terminals.
-    std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge;
+    std::vector<const Node*> topEdge, bottomEdge, leftEdge, rightEdge, isTerminal;
     // For random placement
-    std::mt19937 rng{std::random_device{}()};
+    std::mt19937 rng{ std::random_device{}() };
     std::set<std::pair<int, int>> occupiedPositions;
 
-    for (const auto& pair : nodes) {
-        const auto& node = pair.second;
-        int adjustedX = node.getX() + coordinateShift;
-        int adjustedY = node.getY() + coordinateShift;
-        maxX = std::max(maxX, adjustedX);
-        maxY = std::max(maxY, adjustedY); 
+    for (auto pair : nodes) {
+        if (pair.second.isTerminal()) {
+            isTerminal.push_back(&nodes.at(pair.first));
+        }
+    }
 
+    auto maxElementX = max_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {//ChatGPT "how to find a max struct in a vector by its int value"
+        return a->getX() < b->getX();
+        });
+    maxX = (*maxElementX)->getX();
+    auto maxElementY = max_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getY() < b->getY();
+        });
+    maxY = (*maxElementY)->getY();
+    auto minElementX = min_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getX() < b->getX();
+        });
+    minX = (*minElementX)->getX();
+    auto minElementY = min_element(isTerminal.begin(), isTerminal.end(), [](const Node* a, const Node* b) {
+        return a->getY() < b->getY();
+        });
+    minY = (*minElementY)->getY();
+
+    for (auto pair : nodes) {
+        Node& node = pair.second;
         if (node.isTerminal()) { // Corrected to use function call syntax
             // Determine the edge for each terminal using getters
-            if (node.getY() == maxY) topEdge.push_back(&node); // Top edge
-            else if (node.getY() == 0) bottomEdge.push_back(&node); // Bottom edge
-            else if (node.getX() == 0) leftEdge.push_back(&node); // Left edge
-            else if (node.getX() == maxX) rightEdge.push_back(&node); // Right edge
+            if (node.getY() == maxY) topEdge.push_back(&nodes.at(pair.first)); // Top edge
+            else if (node.getY() == minY) bottomEdge.push_back(&nodes.at(pair.first)); // Bottom edge
+            else if (node.getX() == minX) leftEdge.push_back(&nodes.at(pair.first)); // Left edge
+            else if (node.getX() == maxX) rightEdge.push_back(&nodes.at(pair.first)); // Right edge
         }
     }
 
     auto distributeTerminals = [&](const std::vector<const Node*>& edgeTerminals, char edge) {
         int numTerminals = edgeTerminals.size();
-        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1) 
-                                                    : grid.size() / (numTerminals + 1);
+        int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1)
+            : grid.size() / (numTerminals + 1);
         for (int i = 0; i < numTerminals; ++i) {
             int pos = (i + 1) * spacing;
             int x = 0, y = 0;
@@ -299,20 +351,20 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     distributeTerminals(leftEdge, 'l');
     distributeTerminals(rightEdge, 'r');
 
-  // Place non-terminal nodes randomly
+    // Place non-terminal nodes randomly
     std::uniform_int_distribution<int> distX(0, grid.size() - 1), distY(0, grid[0].size() - 1);
 
-    for (const auto& pair : nodes) {
-        const auto& node = pair.second;
+    for (auto pair : nodes) {
+        auto& node = pair.second;
         if (!node.isTerminal()) {
             bool placed = false;
             while (!placed) {
                 int randomX = distX(rng);
                 int randomY = distY(rng);
-                if (occupiedPositions.find({randomX, randomY}) == occupiedPositions.end()) {
+                if (occupiedPositions.find({ randomX, randomY }) == occupiedPositions.end()) {
                     // If position is not occupied, place the node
                     write(randomX, randomY, square(squareType::Node, &node));
-                    occupiedPositions.insert({randomX, randomY});
+                    occupiedPositions.insert({ randomX, randomY });
                     placed = true;
                 }
             }
@@ -323,7 +375,8 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-
+std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
+    
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
@@ -365,11 +418,12 @@ float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets
             }
         }
     }
-    delete& bounded;
-    float ocnorm = overlapCount / nets.size(); //normalized overlap count cost => total count of nets is max, min is zero
-    float den = (ug.grid.size() * ug.grid[0].size());
-    float tlnorm = totalLength / den; //normallized total length cost => total grid area * net count is max, min is ~ 1
-    totalCost = (w1 * tlnorm) + (w2 * ocnorm);
+    float ocnorm = overlapCount / static_cast<float>(nets.size()); // Normalized overlap count cost
+    float den = static_cast<float>(grid.size() * grid[0].size()); // Use direct grid dimensions
+    float tlnorm = totalLength / den; // Normalized total length cost
+    totalCost = (w1 * tlnorm) + (w2 * ocnorm); // Combine costs with weights
+    std::cout << "Total Cost: " << totalCost << ", Routable: " << (routable ? "Yes" : "No") << "\n";
+
     return totalCost;
 }
 

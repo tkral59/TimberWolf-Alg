@@ -160,9 +160,6 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
     return init;
 }
 
-
-
-
 Result bestCost(vector<Result> results) {
 	Result best;
 	double mincost = results.at(0).cost;
@@ -429,7 +426,6 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 		if ((newCost < currentCost) || (exp((currentCost - newCost) / temperature) > static_cast<float>(rand()) / RAND_MAX)) {
 			currentGrid = newGrid;
 			currentCost = newCost;
-
 			if (newCost < bestCost) {
 				bestGrid = newGrid;
 				bestCost = newCost;
@@ -442,7 +438,6 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 
 	// bestGrid now contains the optimized grid configuration
 }
-
 
 int main() {
     std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets";

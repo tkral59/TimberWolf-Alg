@@ -375,7 +375,8 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-
+std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
+    
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
@@ -417,11 +418,12 @@ float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets
             }
         }
     }
-    delete& bounded;
-    float ocnorm = overlapCount / nets.size(); //normalized overlap count cost => total count of nets is max, min is zero
-    float den = (ug.grid.size() * ug.grid[0].size());
-    float tlnorm = totalLength / den; //normallized total length cost => total grid area * net count is max, min is ~ 1
-    totalCost = (w1 * tlnorm) + (w2 * ocnorm);
+    float ocnorm = overlapCount / static_cast<float>(nets.size()); // Normalized overlap count cost
+    float den = static_cast<float>(grid.size() * grid[0].size()); // Use direct grid dimensions
+    float tlnorm = totalLength / den; // Normalized total length cost
+    totalCost = (w1 * tlnorm) + (w2 * ocnorm); // Combine costs with weights
+    std::cout << "Total Cost: " << totalCost << ", Routable: " << (routable ? "Yes" : "No") << "\n";
+
     return totalCost;
 }
 

@@ -103,7 +103,6 @@ private:
     vector<vector<square>> grid;
     utilGrid ug;
     vector<Coords> enodes; //coords of empty nodes in grid
-    vector<Coords> eterms;
 public:
     Grid();
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
@@ -113,7 +112,8 @@ public:
     void mutation(int x1, int y1);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
-    float calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    float calcCost(float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2);
     int getGridX();
     int getGridY();
     void updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal);

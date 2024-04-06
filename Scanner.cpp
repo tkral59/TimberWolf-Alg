@@ -427,7 +427,6 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 		if ((newCost < currentCost) || (exp((currentCost - newCost) / temperature) > static_cast<float>(rand()) / RAND_MAX)) {
 			currentGrid = newGrid;
 			currentCost = newCost;
-
 			if (newCost < bestCost) {
 				bestGrid = newGrid;
 				bestCost = newCost;
@@ -442,27 +441,45 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 }
 */
 
+
 int main() {
-	std::string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
-	std::string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
-	std::string plfile = "P2Benchmarks\\ibm01\\ibm01.pl";
+    std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets";
+    std::string nodefile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nodes";
+    std::string plfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.pl";
 
-	std::map<std::string, Node> nodes;
-	std::map<std::string, Net> nets;
-	int numNet = 0, numPins = 0, numNode = 0, numTerminals = 0;
+    std::map<std::string, Node> nodes;
+    std::map<std::string, Net> nets;
+    int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
 
-	try {
-		read(netfile, nodefile, plfile, nodes, nets, numNet, numPins, numNode, numTerminals);
-		std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
-		Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
+    try {
+        read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
+        std::cout << "Loaded " << nodes.size() << " nodes and " << nets.size() << " nets." 
+                  << "\nNumNets: " << numNets << ", NumPins: " << numPins << ", NumNodes: " << numNodes 
+                  << ", NumTerminals: " << numTerminals << ".\n";
 
-		std::cout << "Optimization completed. Displaying results:\n";
-		// Assuming you now return a single best result from simulatedAnnealing
-		std::cout << "Best cost: " << bestResult.cost << std::endl;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Error during optimization: " << e.what() << std::endl;
-	}
+        std::vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
+        std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
 
-	return 0;
+        if (init.empty()) {
+            std::cerr << "Failed to create initial grids. Aborting optimization.\n";
+            return 1;
+        }
+
+        Result bestResult = simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);
+        
+        if (!bestResult.routable) {
+            std::cerr << "Failed to find a routable solution.\n";
+            return 1;
+        }
+
+        std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Error during optimization: " << e.what() << ".\n";
+        return 1; // Return an error code
+    } catch (...) {
+        std::cerr << "An unknown error has occurred.\n";
+        return 1; // Return an error code for any unexpected exceptions
+    }
+
+    return 0; // Successful execution
 }

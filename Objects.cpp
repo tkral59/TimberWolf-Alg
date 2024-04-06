@@ -362,7 +362,8 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-
+std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
+    
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects

@@ -201,6 +201,8 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
 void Grid::write(int x, int y, square s) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
         grid[x][y] = s;
+        Coords c(x, y);
+        nodeCoords[s.getNode()->getName()] = c;
         if (2 * x < ug.grid.size() && 2 * y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
             ug.write(x * 2, y * 2, s);
         }
@@ -323,13 +325,15 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
         int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1)
             : grid.size() / (numTerminals + 1);
         for (int i = 0; i < numTerminals; ++i) {
-            int pos = (i + 1) * spacing;
+            int pos = 0;
+            if (spacing == 1)  pos = ((i + 1) * spacing);
+            else  pos = ((i + 1) * spacing) - 1; //want to start at index 1 no terminals at corners
             int x = 0, y = 0;
             if (edge == 't') { x = pos; y = 0; }
             else if (edge == 'b') { x = pos; y = grid.size() - 1; }
             else if (edge == 'l') { x = 0; y = pos; }
             else if (edge == 'r') { x = grid[0].size() - 1; y = pos; }
-            write(x, y, square(squareType::Terminal, edgeTerminals[i]));
+            write(y, x, square(squareType::Terminal, edgeTerminals[i]));
         }
     };
 
@@ -339,7 +343,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     distributeTerminals(rightEdge, 'r');
 
     // Place non-terminal nodes randomly
-    std::uniform_int_distribution<int> distX(0, grid.size() - 1), distY(0, grid[0].size() - 1);
+    std::uniform_int_distribution<int> distX(1, grid.size() - 2), distY(1, grid[0].size() - 2);
 
     for (auto pair : nodes) {
         auto& node = pair.second;
@@ -350,7 +354,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
                 int randomY = distY(rng);
                 if (occupiedPositions.find({ randomX, randomY }) == occupiedPositions.end()) {
                     // If position is not occupied, place the node
-                    write(randomX, randomY, square(squareType::Node, &node));
+                    write(randomX, randomY, square(squareType::Node, &nodes.at(node.getName())));
                     occupiedPositions.insert({ randomX, randomY });
                     placed = true;
                 }
@@ -362,10 +366,11 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 
 float Grid::calcCost(float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
-    
+    std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
+
     //vector<Bounds> bounded;
     bounded.clear();//incase bounded already populated
+
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
         const Net* net = &netPair.second;
         int xmin = net->Nodes.at(0)->getX(), xmax = xmin, ymin = net->Nodes.at(0)->getX(), ymax = ymin;
@@ -373,14 +378,14 @@ std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
         // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
 
         for (size_t i = 0; i < net->Nodes.size(); ++i) { //iterate through nodes and find min/max x/y
-            int x = net->Nodes.at(i)->getX();
-            int y = net->Nodes.at(i)->getY();
+            int x = nodeCoords.at(net->Nodes.at(i)->getName()).x;
+            int y = nodeCoords.at(net->Nodes.at(i)->getName()).x;
             if (x < xmin) xmin = x;
             if (x > xmax) xmax = x;
             if (y < ymin) ymin = y;
             if (y > ymax) ymax = y;
 
-            totalLength = abs(xmax - xmin) + abs(ymax - ymin);
+            totalLength += abs(xmax - xmin) + abs(ymax - ymin);
             if (net->isCritical) critCost += totalLength / 2; //if the net is critical then add additional cost equivlent to 1/2 net length
 
             newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = net;
@@ -399,18 +404,19 @@ std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
                 float area2 = abs(bounds.x2 - bounds.x1) * abs(bounds.y2 - bounds.y1); //net j box area
                 if ((interArea / min(area1, area2)) <= 0.25) { //if overlap is greater than 25%
                     olcount++;
-                    overlapCount++;
-                    if (olcount > wireConstraint) routable = false; //if overlapping net boxes > constraint then the design is not routable
+                    overlapCount += interArea;
+                    if (olcount > wireConstraint) routable = false; break; //if overlapping net boxes > constraint then the design is not routable
                 }
             }
         }
     }
-    delete& bounded;
-    float ocnorm = overlapCount / nets.size(); //normalized overlap count cost => total count of nets is max, min is zero
-    float den = (ug.grid.size() * ug.grid[0].size());
-    float tlnorm = totalLength / den; //normallized total length cost => total grid area * net count is max, min is ~ 1
-    float crnorm = critCost / (den / 2);
+    float den = (grid.size() * grid[0].size());
+    float ocnorm = overlapCount / (nets.size() * den); //normalized overlap count cost => total count of nets is max, min is zero
+
+    float tlnorm = totalLength / (nets.size() * den); //normallized total length cost => total grid area * net count is max, min is ~ 1
+    float crnorm = critCost / (nets.size() * den) / 2;
     totalCost = (w1 * tlnorm) + (w2 * ocnorm) + (w3 + crnorm);
+    cout << "Total Cost:" << totalCost << ", Routable: " << (routable ? "Yes" : "No") << endl;
     return totalCost;
 }
 

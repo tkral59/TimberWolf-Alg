@@ -151,7 +151,6 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
 		bool routable = false;
 		vector<Bounds> bounds;
 		float cost = grid.calcCost(w1, w2, w3, nets, routable, wireConstraint, bounds);
-
 		init.emplace_back(std::move(grid), cost, routable, std::move(bounds));
 	}
 	cout << "Finished creating Initial Grids" << endl;
@@ -316,7 +315,7 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 		while (e <= 0.) { //get an positive transition
 			int ra = rand() % 3;
 			int ri = rand() % init.size();
-			if (ra <= 1) { //select
+			if (ra == 0) { //select
 				e = r.cost - init.at(ri).cost;
 			}
 			else if (ra == 2) {
@@ -443,43 +442,45 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 
 
 int main() {
-    std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets";
-    std::string nodefile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nodes";
-    std::string plfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.pl";
+	std::string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
+	std::string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
+	std::string plfile = "P2Benchmarks\\ibm01\\ibm01.pl";
 
-    std::map<std::string, Node> nodes;
-    std::map<std::string, Net> nets;
-    int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
+	std::map<std::string, Node> nodes;
+	std::map<std::string, Net> nets;
+	int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
 
-    try {
-        read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
-        std::cout << "Loaded " << nodes.size() << " nodes and " << nets.size() << " nets." 
-                  << "\nNumNets: " << numNets << ", NumPins: " << numPins << ", NumNodes: " << numNodes 
-                  << ", NumTerminals: " << numTerminals << ".\n";
+	try {
+		read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
+		std::cout << "Loaded " << nodes.size() << " nodes and " << nets.size() << " nets."
+			<< "\nNumNets: " << numNets << ", NumPins: " << numPins << ", NumNodes: " << numNodes
+			<< ", NumTerminals: " << numTerminals << ".\n";
+		findTop10Percent(nets);
+		std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
+		std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
 
-        std::vector<Result> init = createInitialGrids(nodes, 10, 0.5, 0.5, nets, 4);
-        std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
+		if (init.empty()) {
+			std::cerr << "Failed to create initial grids. Aborting optimization.\n";
+			return 1;
+		}
 
-        if (init.empty()) {
-            std::cerr << "Failed to create initial grids. Aborting optimization.\n";
-            return 1;
-        }
+		Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
 
-        Result bestResult = simulatedAnnealing(init, 0.5, 0.5, nets, 4, nodes);
-        
-        if (!bestResult.routable) {
-            std::cerr << "Failed to find a routable solution.\n";
-            return 1;
-        }
+		if (!bestResult.routable) {
+			std::cerr << "Failed to find a routable solution.\n";
+			return 1;
+		}
 
-        std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
-    } catch (const std::exception& e) {
-        std::cerr << "Error during optimization: " << e.what() << ".\n";
-        return 1; // Return an error code
-    } catch (...) {
-        std::cerr << "An unknown error has occurred.\n";
-        return 1; // Return an error code for any unexpected exceptions
-    }
+		std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Error during optimization: " << e.what() << ".\n";
+		return 1; // Return an error code
+	}
+	catch (...) {
+		std::cerr << "An unknown error has occurred.\n";
+		return 1; // Return an error code for any unexpected exceptions
+	}
 
-    return 0; // Successful execution
+	return 0; // Successful execution
 }

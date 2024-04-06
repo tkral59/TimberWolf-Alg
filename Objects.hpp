@@ -23,10 +23,12 @@ struct Net {
 
 struct Coords {
     int x, y;
+    Coords() = default;
     Coords(int x, int y) : x(x), y(y) {}
     bool operator==(const Coords& other) const {//ChatGPT
         return x == other.x && y == other.y;
     }
+    Node* n;
 };
 
 struct Bounds {
@@ -103,6 +105,7 @@ private:
     vector<vector<square>> grid;
     utilGrid ug;
     vector<Coords> enodes; //coords of empty nodes in grid
+    map<string, Coords> nodeCoords;//map name to coordinates
 public:
     Grid();
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor

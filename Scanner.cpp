@@ -9,7 +9,6 @@
 #include <thread>
 #include <mutex>
 #include "Objects.hpp"
-//#include "Scanner.hpp"
 #include <sstream> // Add this at the top of Scanner.cpp
 
 using namespace std;
@@ -142,22 +141,21 @@ bool isNumeric(const std::string& str) {
 }
 
 
-vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, const std::map<std::string, Net>& nets, int wireConstraint) {
-    vector<Result> init;
-    std::random_device rd;
-    std::mt19937 g(rd());
+vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int k, float const w1, float const w2, float const w3, map<string, Net> const nets, int wireConstraint) {
+	vector<Result> init;
+	std::random_device rd;
+	std::mt19937 g(rd());
 
-    for (int i = 0; i < k; ++i) {
-        Grid grid(nodes);
-        bool routable = false;
-        vector<Bounds> bounds;
-        float cost = grid.calcCost(w1, w2, nets, routable, wireConstraint, bounds);
+	for (int i = 0; i < k; ++i) {
+		Grid grid(nodes); // Use `grid` instead of `g` to avoid confusion with `std::mt19937 g`
+		bool routable = false;
+		vector<Bounds> bounds;
+		float cost = grid.calcCost(w1, w2, w3, nets, routable, wireConstraint, bounds);
 
-        // Create a new Result object and add it to the vector
-        Result newResult(grid, cost, routable, bounds);
-        init.push_back(std::move(newResult)); // Use std::move if Result is move-enabled for efficiency
-    }
-    return init;
+		init.emplace_back(std::move(grid), cost, routable, std::move(bounds));
+	}
+	cout << "Finished creating Initial Grids" << endl;
+	return init;
 }
 
 Result bestCost(vector<Result> results) {
@@ -267,7 +265,7 @@ vector<Result> tournamentSelection(std::vector<Result> population, const std::ma
 	return newTopFive;
 }
 
-vector<Result> perturb(std::vector<Result>& population, const std::map<std::string, Net>& nets, float w1, float w2, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
+vector<Result> perturb(std::vector<Result>& population, const std::map<std::string, Net>& nets, float w1, float w2, float w3, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
 	std::vector<Result> nextGeneration;
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -287,7 +285,7 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 		Grid* child = crossover(parent1, parent2, nets, nodes); //may be creation error here
 		bool rout = false;
 		vector<Bounds> b;
-		float cost = child->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		float cost = child->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
 		Result r(*child, cost, rout, b);
 		nextGeneration.push_back(r);
 
@@ -302,14 +300,14 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 		copy->mutation(rx, ry);
 		bool rout = false;
 		vector<Bounds> b;
-		float cost = copy->calcCost(w1, w2, nets, rout, wireConstraint, b);
+		float cost = copy->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
 		Result r(*copy, cost, rout, b);
 		nextGeneration.push_back(r);
 	}
 	return nextGeneration;
 }
 
-double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint) {
+double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint) {
 	double emax = 0., emin = 0.;
 	double esum = 0;
 	vector<double> es;
@@ -331,7 +329,7 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				copy.mutation(rx, ry);
 				bool route = false;
 				vector<Bounds> b;
-				float cost = copy.calcCost(w1, w2, nets, routable, wireConstraint, b);
+				float cost = copy.calcCost(w1, w2, w3, nets, routable, wireConstraint, b);
 				Result n(copy, cost, route, b);
 				e = n.cost - r.cost;
 			}
@@ -363,9 +361,9 @@ double schedule(double temp, double initialTemp) {
 	else return 0.8 * temp;
 }
 
-Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
+Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false; // Ensure it's declared
-	double t = generateInitialTemp(initialGrids, 5., w1, w2, nets, routable, wireConstraint);
+	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint);
 	double initT = t;
 	vector<Result> population = initialGrids;
 	vector<Result> new_pop;
@@ -376,8 +374,9 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 	while (t > 0) {
 		while (routable == false) {
 			cout << "Iteration " << iteration << "; Temp = " << t << endl;
-			new_pop = perturb(population, nets, w1, w2, wireConstraint, nodes, 0.5, 0.25, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
-			deltaC = bestCost(new_pop).cost - bestCost(population).cost; //NEED BEST COST FUNCTION
+			new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.5, 0.25, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+			Result nbc = bestCost(new_pop);
+			deltaC = nbc.cost - bestCost(population).cost; //NEED BEST COST FUNCTION
 			cout << "\t Delta C = " << deltaC << endl;
 
 			// for exploration
@@ -391,7 +390,9 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 			//if better cost, exploit
 			if (deltaC < 0) {
 				population = new_pop;
-				best_pop = new_pop;
+				if (nbc.cost < bestCost(best_pop).cost) {
+					best_pop = new_pop;
+				}
 				cout << "\t \t new best population!" << endl;
 			}
 
@@ -404,7 +405,7 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 	}
 	return bestCost(best_pop);
 }
-
+/*
 void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& nets, int wireConstraint, float initialTemperature = 100.0f, int totalSteps = 10000) {
 	srand(static_cast<unsigned>(time(nullptr))); // Seed the RNG
 
@@ -412,7 +413,7 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 	Grid currentGrid = initialGrid;
 	bool routable;
 	std::vector<Bounds> bounds;
-	float currentCost = currentGrid.calcCost(1.0, 1.0, nets, routable, wireConstraint, bounds);
+	float currentCost = currentGrid.calcCost(1.0, 1.0, 1.0, nets, routable, wireConstraint, bounds);
 
 	Grid bestGrid = currentGrid;
 	float bestCost = currentCost;
@@ -421,7 +422,7 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 		Grid newGrid = currentGrid; // Create a new candidate by copying the current grid
 		newGrid.mutation(rand() % newGrid.getGridX(), rand() % newGrid.getGridY()); // Apply mutation
 
-		float newCost = newGrid.calcCost(1.0, 1.0, nets, routable, wireConstraint, bounds); // Calculate the new cost
+		float newCost = newGrid.calcCost(1.0, 1.0, 1.0, nets, routable, wireConstraint, bounds); // Calculate the new cost
 
 		if ((newCost < currentCost) || (exp((currentCost - newCost) / temperature) > static_cast<float>(rand()) / RAND_MAX)) {
 			currentGrid = newGrid;
@@ -438,6 +439,8 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 
 	// bestGrid now contains the optimized grid configuration
 }
+*/
+
 
 int main() {
     std::string netfile = "/Users/Karan/Downloads/vlsi3/ibmISPD02Bench_Bookshelf/ibm01/ibm01.nets";

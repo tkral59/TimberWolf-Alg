@@ -238,38 +238,44 @@ void exportForVisualization(Result r, const std::string& filename) {
 	}
 	file.close();
 }
-/*
-void performCrossoversThread(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes) {
+
+void performCrossoversThread(std::vector<Result>& offspring, vector<Result>& parents, map<std::string, Net> nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes, float w1, float w2, float w3, int wireConstraint) {
 	for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
 		// Perform crossover on parents[i] and parents[i+1]
-		Grid* child = crossover(parents[i], parents[i + 1], nets, nodes); // Ensure your crossover function is thread-safe.
+		Grid* child = crossover(&parents[i].g, &parents[i + 1].g, nets, nodes); // Ensure your crossover function is thread-safe.
+		bool rout = true;
 		std::lock_guard<mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
-		offspring.push_back(child);
+		vector<Bounds> b;
+		float cost = child->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
+		Result r(*child, cost, rout, b);
+		offspring.push_back(r);
 	}
 }
 
-void multithreadedCrossover(std::vector<Grid*>& offspring, const std::vector<Grid*>& parents, const std::map<std::string, Net>& nets, unsigned int numThreads) {
-	vector<thread> threads;
-	mutex offspringMutex; // Protects access to the offspring vector.
+void multithreadedCrossover(vector<Result>& offspring, vector<Result>& parents, map<std::string, Net> nets, unsigned int numThreads, map<std::string, Node> nodes, float w1, float w2, float w3, int wireConstraint) {
+	std::vector<std::thread> threads; // Thread vector
+	std::mutex offspringMutex; // Mutex for protecting access to the offspring vector
 
-	int segmentSize = parents.size() / numThreads; // Determine workload size per thread.
+	int segmentSize = parents.size() / numThreads; // Calculate the segment size per thread
 
 	for (unsigned int i = 0; i < numThreads; ++i) {
 		int startIdx = i * segmentSize;
-		int endIdx = (i == numThreads - 1) ? parents.size() : (i + 1) * segmentSize; // Ensure the last thread covers any remaining parents.
+		int endIdx = (i == numThreads - 1) ? parents.size() : (i + 1) * segmentSize; // Adjust the last segment to cover all remaining parents
 
-		// Launch a thread to process its segment of the parents vector.
-		threads.emplace_back(performCrossoversThread, std::ref(offspring), std::ref(parents), std::ref(nets), startIdx, endIdx, std::ref(offspringMutex));
+		// Launch a thread for each segment of the parents vector
+		threads.emplace_back([&, startIdx, endIdx]() {
+			performCrossoversThread(offspring, parents, nets, startIdx, endIdx, offspringMutex, nodes, w1, w2, w3, wireConstraint);
+			});
 	}
 
-	// Wait for all threads to complete their tasks.
+	// Wait for all threads to complete their tasks
 	for (std::thread& t : threads) {
 		if (t.joinable()) {
 			t.join();
 		}
 	}
 }
-*/
+
 bool compareByFloat(const Result& a, const Result& b) { //ChatGPT
 	return a.cost > b.cost; // Change to < for ascending order
 }
@@ -288,7 +294,7 @@ vector<Result> tournamentSelection(std::vector<Result> population, const std::ma
 	return newTopFive;
 }
 
-vector<Result> perturb(std::vector<Result>& population, const std::map<std::string, Net>& nets, float w1, float w2, float w3, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
+vector<Result> perturb(std::vector<Result>& population, map<std::string, Net>& nets, float w1, float w2, float w3, int wireConstraint, map<string, Node> nodes, float selectP, float crossP, float mutP) {
 	std::vector<Result> nextGeneration;
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -300,12 +306,15 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 	count += nextGeneration.size();
 	//Crossover
 	int cCount = population.size() * crossP;
+	vector<Result> crossoverOffspring;
+	//multithreadedCrossover(crossoverOffspring, nextGeneration, nets, cCount, nodes, w1, w2, w3, wireConstraint);
+
 	for (int i = 0; i < cCount; ++i) {
 		int i1 = rand() % count;
 		int i2 = rand() % count;
 		Grid* parent1 = &nextGeneration[i1].g;
 		Grid* parent2 = &nextGeneration[i2].g;
-		Grid* child = crossover(parent1, parent2, nets, nodes); //may be creation error here
+		Grid* child = crossover(parent1, parent2, nets, nodes);
 		bool rout = false;
 		vector<Bounds> b;
 		float cost = child->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
@@ -313,6 +322,7 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 		nextGeneration.push_back(r);
 
 	}
+
 	count += cCount;
 	//Mutation
 	for (int i = count - 1; i < population.size(); i++) {
@@ -320,6 +330,7 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 		Grid* copy = &nextGeneration[in].g;
 		int rx = rand() % copy->getGridX();
 		int ry = rand() % copy->getGridY();
+		//copy->smartMutation(rx, ry, nextGeneration[in].bounds);
 		copy->mutation(rx, ry);
 		bool rout = false;
 		vector<Bounds> b;
@@ -361,7 +372,7 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				int rx = rand() % copy.getGridX(); //create initial grid x param;
 				int ry = rand() % copy.getGridY();//create initial grid y param;
 				copy.mutation(rx, ry);
-				bool test = r.g.getCoords() == copy.getCoords();
+				//copy.smartMutation(rx, ry, r.bounds);
 				bool route = false;
 				vector<Bounds> b;
 				float cost = copy.calcCost(w1, w2, w3, nets, routable, wireConstraint, b);
@@ -396,7 +407,7 @@ double schedule(double temp, double initialTemp) {
 	else return 0.8 * temp;
 }
 
-Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
+Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false; // Ensure it's declared
 	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
 	double initT = t;

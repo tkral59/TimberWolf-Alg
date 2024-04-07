@@ -106,6 +106,7 @@ private:
     utilGrid ug;
     vector<Coords> enodes; //coords of empty nodes in grid
     map<string, Coords> nodeCoords;//map name to coordinates
+
 public:
     Grid();
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
@@ -113,6 +114,7 @@ public:
     void swap(int x1, int y1, int x2, int y2);
     void move(int x1, int y1, int x2, int y2);
     void mutation(int x1, int y1);
+    void smartMutation(int x1, int y1, vector<Bounds> b);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
     float calcCost(float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;

@@ -17,6 +17,7 @@ Node::Node() {
     nets = netlist;
     x = 0;
     y = 0;
+    z = 0;
 }
 
 Node::Node(string name, vector<Net*> nets, int x, int y, bool isTerminal) {
@@ -42,6 +43,10 @@ int Node::getX() const {
 
 int Node::getY() const {
     return y; // Assuming 'y' is an integer member variable of Node
+}
+
+int Node::getZ() const {
+    return z;
 }
 void Node::setXY(int newX, int newY) {
     this->x = newX;
@@ -198,6 +203,11 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
     initialPlacement(nodes);
 }
 
+Grid::Grid(int totalNodes) {
+    int gridSize = ceil(sqrt(totalNodes) * 1.1);
+    grid = vector<vector<square>>(gridSize, vector<square>(gridSize, square()));
+}
+
 void Grid::write(int x, int y, square s) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
         grid[x][y] = s;
@@ -225,6 +235,19 @@ void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
     } //somtimes causes errors
 }
 
+void Grid::updateEnodes() {
+    enodes.clear();
+    for (int i = 1; i < (grid.size() - 1); i++) {
+        for (int j = 1; j < (grid[0].size() - 1); j++) {
+            if (grid[i][j].getNode() == nullptr) {
+                Coords c(i, j);
+                enodes.push_back(c);
+            }
+        }
+    }
+
+}
+
 void Grid::move(int x1, int y1, int x2, int y2) {
     if (grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) {
         cerr << "Cannot cast move on terminal nodes." << endl;
@@ -237,10 +260,15 @@ void Grid::move(int x1, int y1, int x2, int y2) {
                 nodeCoords[grid[x1][y1].getNode()->getName()].y = y2;
             }
             grid[x2][y2] = grid[x1][y1];
+            grid[x1][y1].setNode(nullptr);
             updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
         }
         else if (grid[x1][y1].getNode() == nullptr) {
+            nodeCoords[grid[x2][y2].getNode()->getName()].x = x1;
+            nodeCoords[grid[x2][y2].getNode()->getName()].y = y1;
             grid[x1][y1] = grid[x2][y2];
+            grid[x2][y2].setNode(nullptr);
+
             updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
         }
         else cerr << "Trying to move to none empty Node square" << endl;
@@ -270,7 +298,7 @@ void Grid::swap(int x1, int y1, int x2, int y2) {
     }
 }
 
-void Grid::smartMutation(int x1, int y1, vector<Bounds> bo) {
+void Grid::smartMutation(int x1, int y1, vector<Bounds> bo, map<string, Net> nets) {
     int ran = rand() % 2;
     int rand_x = 0;
     int rand_y = 0;
@@ -285,10 +313,14 @@ void Grid::smartMutation(int x1, int y1, vector<Bounds> bo) {
         return;
     }
     for (Bounds b : bo) {
-        if (b.net->name == grid[x1][y1].getNode()->getName()) {
-            x = b;
-            exit;
+        for (auto net : grid[x1][y1].getNode()->getNets()) {
+            if (*b.name == net->name) {
+                x = b;
+                exit;
+            }
         }
+
+
     }
 
 
@@ -296,6 +328,9 @@ void Grid::smartMutation(int x1, int y1, vector<Bounds> bo) {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> xdistribution(x.x1, x.x2);
     std::uniform_int_distribution<int> ydistribution(x.y1, x.y2);
+    if (x.x2 > 125 || x.y2 > 125) {
+        cout << "Crazy Bounds" << endl;
+    }
     if (ran % 2 == 0) { //Even will use the swap function
         rand_x = xdistribution(gen);
         rand_y = ydistribution(gen);
@@ -305,6 +340,9 @@ void Grid::smartMutation(int x1, int y1, vector<Bounds> bo) {
     else {  //Odd will use the move function
         for (auto c : enodes) {
             if (c.x < x.x2 && c.x > x.x1 && c.y < x.y2 && c.y > x.y1) {
+                if (c.x > 125 || c.y > 125) {
+                    cout << "Crazy Coordinate" << endl;
+                }
                 move(x1, y1, c.x, c.y);
                 return;
             }
@@ -425,8 +463,8 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
         }
     }
 
-    for (int i = 0; i < grid.size(); i++) {
-        for (int j = 0; j < grid[0].size(); j++) {
+    for (int i = 1; i < grid.size() - 1; i++) {
+        for (int j = 1; j < grid[0].size() - 1; j++) {
             if (grid[i][j].getNode() == nullptr) {
                 Coords c(i, j);
                 enodes.push_back(c);
@@ -446,7 +484,7 @@ float Grid::calcCost(float const w1, float const w2, float const w3, map<string,
     for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
         const Net* net = &netPair.second;
         auto name = net->name;
-        int xmin = net->Nodes.at(0)->getX(), xmax = xmin, ymin = net->Nodes.at(0)->getX(), ymax = ymin;
+        int xmin = 0, xmax = xmin, ymin = 0, ymax = ymin;
         Bounds newBounds;
         // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
 
@@ -463,13 +501,17 @@ float Grid::calcCost(float const w1, float const w2, float const w3, map<string,
 
 
         }
-        newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = &nets[name];
+        if (xmax > 125 || ymax > 125) {
+            cout << "flag" << endl;
+        }
+        newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax;
+        newBounds.name = new string(nets[name].name);
         bounded.push_back(newBounds);
 
         //calculated overlap of nets
         int olcount = 0;
         for (Bounds const bounds : bounded) {
-            if (bounds.net->name != netPair.first) {
+            if (*bounds.name != netPair.first) {
                 //overlap cost (total nets overlap)
                 float x_overlap = max(0, min(newBounds.x2, bounds.x2) - max(newBounds.x1, bounds.x1)); //x overlap
                 float y_overlap = max(0, min(newBounds.y2, bounds.y2) - max(newBounds.y1, bounds.y1));//y overlap
@@ -501,6 +543,8 @@ float updateCost(float const w1, float const w2, float const w3, bool& routable,
 void Grid::placeNode(int x, int y, const Node* node) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[0].size()) {
         grid[x][y].setNode(node);
+        Coords c(x, y);
+        nodeCoords[node->getName()] = c;
     }
     else {
         // Handle the error: position out of bounds

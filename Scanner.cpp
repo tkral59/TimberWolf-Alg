@@ -150,6 +150,7 @@ vector<Result> createInitialGrids(const std::map<std::string, Node>& nodes, int 
 		Grid grid(nodes); // Use `grid` instead of `g` to avoid confusion with `std::mt19937 g`
 		bool routable = false;
 		vector<Bounds> bounds;
+		bounds.reserve(50000);
 		float cost = grid.calcCost(w1, w2, w3, nets, routable, wireConstraint, bounds);
 		init.emplace_back(std::move(grid), cost, routable, std::move(bounds));
 	}
@@ -161,11 +162,11 @@ Result bestCost(vector<Result> results) {
 	Result best;
 	double mincost = results.at(0).cost;
 	if (results.at(0).routable) return results.at(0);
-	for (int i = 1; i < results.size(); i++) {
+	for (int i = 0; i < results.size(); i++) {
 		if (results.at(i).routable) {
 			return results.at(i);
 		}
-		else if (results.at(i).cost < mincost) {
+		else if (results.at(i).cost <= mincost) {
 			mincost = results.at(i).cost;
 			best = results.at(i);
 		}
@@ -173,8 +174,20 @@ Result bestCost(vector<Result> results) {
 	return best;
 }
 
-Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& nets, const std::map<std::string, Node>& nodes) {
-	auto child = new Grid(nodes); // Assuming Grid can be initialized this way
+void tryPlaceNode(const Node* node, int i, int j, set<std::string>& placedNodeNames, Grid& child, set<string>& toBePlaced) {
+	if (!node || placedNodeNames.count(node->getName())) return; // Already placed
+	// Find a position for the node
+	if (!child.getSquare(i, j).getNode()) { // Position is empty
+		child.placeNode(i, j, node);
+		placedNodeNames.insert(node->getName());
+		auto it = toBePlaced.find(node->getName());
+		toBePlaced.erase(it);
+		return;
+	}
+}
+
+Grid crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& nets, const std::map<std::string, Node> nodes) {
+	Grid child = Grid(nodes.size());
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -182,49 +195,45 @@ Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& 
 
 	int crossoverPoint = dis(gen);
 	std::set<std::string> placedNodeNames; // To track which nodes have been placed
-
-	// Function to attempt placing a node in the child, finds alternative position if needed
-	auto tryPlaceNode = [&](const Node* node) {
-		if (!node || placedNodeNames.count(node->getName())) return; // Already placed
-		// Find a position for the node
-		for (int i = 0; i < child->getGridSize(); ++i) {
-			for (int j = 0; j < child->getGridSize(); ++j) {
-				if (!child->getSquare(i, j).getNode()) { // Position is empty
-					child->placeNode(i, j, node);
-					placedNodeNames.insert(node->getName());
-					return;
-				}
-			}
-		}
-	};
-
+	set<string> toBePlaced;
+	for (auto node : nodes) {
+		toBePlaced.insert(node.second.getName());
+	}
 	// First pass: place nodes from both parents up to crossover point
 	for (int i = 0; i <= crossoverPoint; ++i) {
-		if (i < parent1->getGridSize()) {
-			for (int j = 0; j < parent1->getGridSize(); ++j) {
-				tryPlaceNode(parent1->getSquare(i, j).getNode());
+		for (int j = 0; j < child.getGridY(); j++) {
+			if (parent1->getSquare(i, j).getNode() != nullptr) {
+				tryPlaceNode(parent1->getSquare(i, j).getNode(), i, j, placedNodeNames, child, toBePlaced);
 			}
 		}
-		if (i < parent2->getGridSize()) {
-			for (int j = 0; j < parent2->getGridSize(); ++j) {
-				tryPlaceNode(parent2->getSquare(i, j).getNode());
+	}
+	for (int i = crossoverPoint + 1; i < child.getGridSize(); i++) {
+		for (int j = 0; j < child.getGridY(); j++) {
+			if (parent2->getSquare(i, j).getNode() != nullptr) tryPlaceNode(parent2->getSquare(i, j).getNode(), i, j, placedNodeNames, child, toBePlaced);
+		}
+	}
+	/*
+	// Second pass: ensure all nodes from both parents are considered
+	for (int i = 0; i < child.getGridX(); ++i) {
+		for (int j = 0; j < child.getGridY(); j++) {
+			if (parent2->getSquare(i, j).getNode() != nullptr) tryPlaceNode(parent2->getSquare(i, j).getNode(), i, j, placedNodeNames, child);
+		}
+	}
+	for (int i = 0; i < child.getGridX(); i++) {
+		for (int j = 0; j < child.getGridY(); j++) {
+			if (parent1->getSquare(i, j).getNode() != nullptr) tryPlaceNode(parent1->getSquare(i, j).getNode(), i, j, placedNodeNames, child);
+		}
+	}
+	*/
+	for (int i = 0; i < child.getGridX(); i++) {
+		for (int j = 0; j < child.getGridY(); j++) {
+			if (child.getSquare(i, j).getNode() == nullptr && !toBePlaced.empty()) {
+				tryPlaceNode(&nodes.at(*toBePlaced.begin()), i, j, placedNodeNames, child, toBePlaced);
 			}
 		}
 	}
 
-	// Second pass: ensure all nodes from both parents are considered
-	for (int i = crossoverPoint + 1; i < std::max(parent1->getGridSize(), parent2->getGridSize()); ++i) {
-		if (i < parent1->getGridSize()) {
-			for (int j = 0; j < parent1->getGridSize(); ++j) {
-				tryPlaceNode(parent1->getSquare(i, j).getNode());
-			}
-		}
-		if (i < parent2->getGridSize()) {
-			for (int j = 0; j < parent2->getGridSize(); ++j) {
-				tryPlaceNode(parent2->getSquare(i, j).getNode());
-			}
-		}
-	}
+	child.updateEnodes();
 
 	return child;
 }
@@ -234,7 +243,7 @@ void exportForVisualization(Result r, const std::string& filename) {
 	file << "Net,Xmin,Ymin,Xmax,Ymax\n";
 	for (auto b : r.bounds) {
 		// Assume bounds are calculated and stored somewhere accessible
-		file << b.net->name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
+		file << b.name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
 	}
 	file.close();
 }
@@ -242,12 +251,12 @@ void exportForVisualization(Result r, const std::string& filename) {
 void performCrossoversThread(std::vector<Result>& offspring, vector<Result>& parents, map<std::string, Net> nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes, float w1, float w2, float w3, int wireConstraint) {
 	for (int i = startIdx; i < endIdx && (i + 1) < parents.size(); i += 2) {
 		// Perform crossover on parents[i] and parents[i+1]
-		Grid* child = crossover(&parents[i].g, &parents[i + 1].g, nets, nodes); // Ensure your crossover function is thread-safe.
+		Grid child = crossover(&parents[i].g, &parents[i + 1].g, nets, nodes); // Ensure your crossover function is thread-safe.
 		bool rout = true;
 		std::lock_guard<mutex> lock(offspringMutex); // Protecting shared access to the offspring vector.
 		vector<Bounds> b;
-		float cost = child->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
-		Result r(*child, cost, rout, b);
+		float cost = child.calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
+		Result r(child, cost, rout, b);
 		offspring.push_back(r);
 	}
 }
@@ -277,7 +286,7 @@ void multithreadedCrossover(vector<Result>& offspring, vector<Result>& parents, 
 }
 
 bool compareByFloat(const Result& a, const Result& b) { //ChatGPT
-	return a.cost > b.cost; // Change to < for ascending order
+	return a.cost < b.cost; // Change to < for ascending order
 }
 
 vector<Result> tournamentSelection(std::vector<Result> population, const std::map<std::string, Net>& nets, float percentage) { //ChatGPT
@@ -291,6 +300,9 @@ vector<Result> tournamentSelection(std::vector<Result> population, const std::ma
 	auto h = topFive.begin();
 	advance(h, topKNum);
 	vector<Result> newTopFive(topFive.begin(), h);
+	for (auto i : newTopFive) {
+		cout << "Selected member with cost: " << i.cost << endl;
+	}
 	return newTopFive;
 }
 
@@ -311,27 +323,36 @@ vector<Result> perturb(std::vector<Result>& population, map<std::string, Net>& n
 
 	for (int i = 0; i < cCount; ++i) {
 		int i1 = rand() % count;
-		int i2 = rand() % count;
+		int i2 = 0;
+		while (i2 != i1) {
+			i2 = rand() % count;
+		}
+
 		Grid* parent1 = &nextGeneration[i1].g;
 		Grid* parent2 = &nextGeneration[i2].g;
-		Grid* child = crossover(parent1, parent2, nets, nodes);
+		Grid child = crossover(parent1, parent2, nets, nodes);
 		bool rout = false;
 		vector<Bounds> b;
-		float cost = child->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
-		Result r(*child, cost, rout, b);
+		float cost = child.calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
+		Result r(child, cost, rout, b);
 		nextGeneration.push_back(r);
 
 	}
 
 	count += cCount;
 	//Mutation
-	for (int i = count - 1; i < population.size(); i++) {
+
+	for (int i = count; i < population.size(); i++) {
 		int in = rand() % count;
 		Grid* copy = &nextGeneration[in].g;
-		int rx = rand() % copy->getGridX();
-		int ry = rand() % copy->getGridY();
-		//copy->smartMutation(rx, ry, nextGeneration[in].bounds);
-		copy->mutation(rx, ry);
+		for (int i = 0; i < 100; i++) { //1 mutation has a miniscule effect on cost, changed to avoid early convergence
+			std::uniform_int_distribution<> distx(1, copy->getGridX() - 2);
+			std::uniform_int_distribution<> disty(1, copy->getGridY() - 2);
+			int rx = distx(gen);
+			int ry = disty(gen);
+			copy->smartMutation(rx, ry, nextGeneration[in].bounds, nets);
+		}
+		//copy->mutation(rx, ry);
 		bool rout = false;
 		vector<Bounds> b;
 		float cost = copy->calcCost(w1, w2, w3, nets, rout, wireConstraint, b);
@@ -363,9 +384,9 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				e = r.cost - init.at(ri).cost;
 			}
 			else if (ra == 1) { //crossover
-				Grid* copy = crossover(&init.at(ri).g, &init.at(ri2).g, nets, nodes); //repleace with multithreaded version
+				Grid copy = crossover(&init.at(ri).g, &init.at(ri2).g, nets, nodes); //repleace with multithreaded version
 				vector<Bounds> b;
-				e = copy->calcCost(w1, w2, w3, nets, routable, wireConstraint, b) - r.cost;
+				e = copy.calcCost(w1, w2, w3, nets, routable, wireConstraint, b) - r.cost;
 			}
 			else {
 				Grid copy = r.g;
@@ -404,26 +425,32 @@ double schedule(double temp, double initialTemp) {
 	if (percentComplete < 0.8 || percentComplete > 0.92) {
 		return 0.95 * temp;
 	}
-	else return 0.8 * temp;
+	else return 0.9 * temp; //changed to cool slower
 }
 
 Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false; // Ensure it's declared
-	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
+	//double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
+	double t = 0.157;
 	double initT = t;
 	vector<Result> population = initialGrids;
 	vector<Result> new_pop;
-	vector<Result> best_pop;
+	vector<Result> best_pop = population;
 	double deltaC = 0;
 	cout << "Initial Cost: " << bestCost(population).cost << endl;
 	int iteration = 1;
 	while (t > 0) {
 		while (routable == false) {
 			cout << "Iteration " << iteration << "; Temp = " << t << endl;
-			new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.5, 0.25, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+			new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+
 			Result nbc = bestCost(new_pop);
+			if (nbc.routable == true) {
+				return nbc;
+				routable = true;
+			}
 			deltaC = nbc.cost - bestCost(population).cost; //NEED BEST COST FUNCTION
-			cout << "\t Delta C = " << deltaC << endl;
+			cout << "\t Best Delta C = " << deltaC << endl;
 
 			// for exploration
 			random_device rd;
@@ -432,14 +459,21 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 			double r = dis(gen);
 			double e = exp(deltaC / t);
 			//end exploration parameters
-
+			sort(population.begin(), population.end(), compareByFloat);
+			sort(new_pop.begin(), new_pop.end(), compareByFloat);
 			//if better cost, exploit
-			if (deltaC < 0) {
+			double sum1 = 0, sum2 = 0;
+
+			for (int i = 0; i < 3; i++) {
+				sum1 += population.at(i).cost;
+				sum2 += new_pop.at(i).cost;
+			}
+			if (sum2 < sum1) { //take top 3 results and compare
 				population = new_pop;
 				if (nbc.cost < bestCost(best_pop).cost) {
 					best_pop = new_pop;
+					cout << "\t \t new best population!" << endl;
 				}
-				cout << "\t \t new best population!" << endl;
 			}
 
 			//chance to explore
@@ -447,6 +481,7 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 				population = new_pop;
 			}
 			t = schedule(t, initT);
+			iteration++;
 		}
 	}
 	return bestCost(best_pop);
@@ -497,37 +532,27 @@ int main() {
 	std::map<std::string, Net> nets;
 	int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
 
-	try {
-		read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
-		std::cout << "Loaded " << nodes.size() << " nodes and " << nets.size() << " nets."
-			<< "\nNumNets: " << numNets << ", NumPins: " << numPins << ", NumNodes: " << numNodes
-			<< ", NumTerminals: " << numTerminals << ".\n";
-		findTop10Percent(nets);
-		std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
-		std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
+	read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
+	std::cout << "Loaded " << nodes.size() << " nodes and " << nets.size() << " nets."
+		<< "\nNumNets: " << numNets << ", NumPins: " << numPins << ", NumNodes: " << numNodes
+		<< ", NumTerminals: " << numTerminals << ".\n";
+	findTop10Percent(nets);
+	std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
+	std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
 
-		if (init.empty()) {
-			std::cerr << "Failed to create initial grids. Aborting optimization.\n";
-			return 1;
-		}
-
-		Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
-
-		if (!bestResult.routable) {
-			std::cerr << "Failed to find a routable solution.\n";
-			return 1;
-		}
-
-		std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
+	if (init.empty()) {
+		std::cerr << "Failed to create initial grids. Aborting optimization.\n";
+		return 1;
 	}
-	catch (const std::exception& e) {
-		std::cerr << "Error during optimization: " << e.what() << ".\n";
-		return 1; // Return an error code
+
+	Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
+
+	if (!bestResult.routable) {
+		std::cerr << "Failed to find a routable solution.\n";
+		return 1;
 	}
-	catch (...) {
-		std::cerr << "An unknown error has occurred.\n";
-		return 1; // Return an error code for any unexpected exceptions
-	}
+
+	std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
 
 	return 0; // Successful execution
 }

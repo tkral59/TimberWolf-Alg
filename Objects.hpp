@@ -33,14 +33,15 @@ struct Coords {
 
 struct Bounds {
     int x1, x2, y1, y2;
-    const Net* net;
+    //const Net* net;
+    string* name;
 };
 
 class Node {
 private:
     std::string name;
     std::vector<Net*> nets;
-    int x = 0, y = 0;
+    int x = 0, y = 0, z = 0;
     bool isTerminalFlag = false; // Renamed to avoid conflict with isTerminal() function
 
 public:
@@ -49,6 +50,7 @@ public:
     ~Node(); // Destructor
     int getX() const;
     int getY() const;
+    int getZ() const;
     void setXY(int newX, int newY);
     std::vector<Net*> getNets() const;
     void addNet(Net* net);
@@ -110,17 +112,19 @@ private:
 public:
     Grid();
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
+    Grid(int totalNodes); //empty grid of certain size
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void move(int x1, int y1, int x2, int y2);
     void mutation(int x1, int y1);
-    void smartMutation(int x1, int y1, vector<Bounds> b);
+    void smartMutation(int x1, int y1, vector<Bounds> b, map<string, Net> nets);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
     float calcCost(float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
     float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2);
     int getGridX();
     int getGridY();
+    void updateEnodes();
     void updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal);
     // New methods for crossover support
     //int getGridSize() const;

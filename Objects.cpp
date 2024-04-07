@@ -75,7 +75,7 @@ void Node::setTerminal(bool terminal) {
 //SQUARE CLASS
 
 square::square() {
-    type = squareType::Routing;
+    type = squareType::Node;
     node = nullptr;
     wires = 0;
 }
@@ -215,9 +215,14 @@ void Grid::write(int x, int y, square s) {
 void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
     Coords a(x2, y2);
     Coords b(x1, y1);
-    enodes.push_back(a);
-    auto it = find(enodes.begin(), enodes.end(), b);
-    enodes.erase(it);
+    enodes.push_back(b);
+    grid[x2][y2].setNode(nullptr);
+    for (auto it = enodes.begin(); it != enodes.end(); ++it) {
+        if ((*it).x == a.x && (*it).y == a.y) {
+            enodes.erase(it);
+            break; // Optional, if you know there is only one element with the value 3
+        }
+    } //somtimes causes errors
 }
 
 void Grid::move(int x1, int y1, int x2, int y2) {
@@ -227,6 +232,10 @@ void Grid::move(int x1, int y1, int x2, int y2) {
     else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cerr << "Trying to Move out of bounds" << endl;
         else  if (grid[x2][y2].getNode() == nullptr) {
+            if (grid[x1][y1].getNode() != nullptr) {
+                nodeCoords[grid[x1][y1].getNode()->getName()].x = x2;
+                nodeCoords[grid[x1][y1].getNode()->getName()].y = y2;
+            }
             grid[x2][y2] = grid[x1][y1];
             updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
         }
@@ -245,6 +254,14 @@ void Grid::swap(int x1, int y1, int x2, int y2) {
     else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cerr << "Trying to Swap out of bounds" << endl;
         else {
+            if (grid[x2][y2].getNode() != nullptr) {
+                nodeCoords[grid[x2][y2].getNode()->getName()].x = x1;
+                nodeCoords[grid[x2][y2].getNode()->getName()].y = y1;
+            }
+            if (grid[x1][y1].getNode() != nullptr) {
+                nodeCoords[grid[x1][y1].getNode()->getName()].x = x2;
+                nodeCoords[grid[x1][y1].getNode()->getName()].y = y2;
+            }
             square temp = grid[x1][y1];
             grid[x1][y1] = grid[x2][y2];
             grid[x2][y2] = temp;
@@ -361,6 +378,15 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
             }
         }
     }
+
+    for (int i = 0; i < grid.size(); i++) {
+        for (int j = 0; j < grid[0].size(); j++) {
+            if (grid[i][j].getNode() == nullptr) {
+                Coords c(i, j);
+                enodes.push_back(c);
+            }
+        }
+    }
 }
 
 
@@ -449,4 +475,12 @@ int Grid::getGridY() {
 
 int Grid::getGridX() {
     return grid.at(0).size();
+}
+
+vector<vector<square>> Grid::getGrid() {
+    return grid;
+}
+
+map<string, Coords> Grid::getCoords() {
+    return nodeCoords;
 }

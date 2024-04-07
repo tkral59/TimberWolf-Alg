@@ -173,35 +173,59 @@ Result bestCost(vector<Result> results) {
 	return best;
 }
 
-Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& nets, map<string, Node> nodes) {
-	// Assume Grid has a constructor that takes the size and nets to initialize an empty grid.
-	auto child = new Grid(nodes);
+Grid* crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& nets, const std::map<std::string, Node>& nodes) {
+	auto child = new Grid(nodes); // Assuming Grid can be initialized this way
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dis(0, parent1->getGridSize() - 1);
 
 	int crossoverPoint = dis(gen);
+	std::set<std::string> placedNodeNames; // To track which nodes have been placed
 
-	// Copy up to the crossover point from parent1
+	// Function to attempt placing a node in the child, finds alternative position if needed
+	auto tryPlaceNode = [&](const Node* node) {
+		if (!node || placedNodeNames.count(node->getName())) return; // Already placed
+		// Find a position for the node
+		for (int i = 0; i < child->getGridSize(); ++i) {
+			for (int j = 0; j < child->getGridSize(); ++j) {
+				if (!child->getSquare(i, j).getNode()) { // Position is empty
+					child->placeNode(i, j, node);
+					placedNodeNames.insert(node->getName());
+					return;
+				}
+			}
+		}
+	};
+
+	// First pass: place nodes from both parents up to crossover point
 	for (int i = 0; i <= crossoverPoint; ++i) {
-		for (int j = 0; j < parent1->getGridSize(); ++j) {
-			auto node = parent1->getSquare(i, j).getNode();
-			if (node && !child->isNodePlaced(node)) {
-				child->placeNode(i, j, node);
+		if (i < parent1->getGridSize()) {
+			for (int j = 0; j < parent1->getGridSize(); ++j) {
+				tryPlaceNode(parent1->getSquare(i, j).getNode());
+			}
+		}
+		if (i < parent2->getGridSize()) {
+			for (int j = 0; j < parent2->getGridSize(); ++j) {
+				tryPlaceNode(parent2->getSquare(i, j).getNode());
 			}
 		}
 	}
 
-	// Fill in the rest from parent2, avoiding duplicates
-	for (int i = crossoverPoint + 1; i < parent2->getGridSize(); ++i) {
-		for (int j = 0; j < parent2->getGridSize(); ++j) {
-			auto node = parent2->getSquare(i, j).getNode();
-			if (node && !child->isNodePlaced(node)) {
-				child->placeNode(i, j, node);
+	// Second pass: ensure all nodes from both parents are considered
+	for (int i = crossoverPoint + 1; i < std::max(parent1->getGridSize(), parent2->getGridSize()); ++i) {
+		if (i < parent1->getGridSize()) {
+			for (int j = 0; j < parent1->getGridSize(); ++j) {
+				tryPlaceNode(parent1->getSquare(i, j).getNode());
+			}
+		}
+		if (i < parent2->getGridSize()) {
+			for (int j = 0; j < parent2->getGridSize(); ++j) {
+				tryPlaceNode(parent2->getSquare(i, j).getNode());
 			}
 		}
 	}
+
 	return child;
 }
 
@@ -306,7 +330,15 @@ vector<Result> perturb(std::vector<Result>& population, const std::map<std::stri
 	return nextGeneration;
 }
 
-double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint) {
+bool isGridEqual(map<string, Coords> g1, map<string, Coords> g2) {
+	for (auto pair : g1) {
+		if (g1[pair.first].x != g2[pair.first].x && g1[pair.first].y != g2[pair.first].y) {
+			return false;
+		}
+	}
+	return true;
+}
+double generateInitialTemp(vector<Result> init, double prob, float const w1, float const w2, float const w3, map<string, Net> const nets, bool& routable, int wireConstraint, map<string, Node> nodes) {
 	double emax = 0., emin = 0.;
 	double esum = 0;
 	vector<double> es;
@@ -315,17 +347,21 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 		while (e <= 0.) { //get an positive transition
 			int ra = rand() % 3;
 			int ri = rand() % init.size();
+			int ri2 = rand() % init.size();
 			if (ra == 0) { //select
 				e = r.cost - init.at(ri).cost;
 			}
-			else if (ra == 2) {
-				//crossover
+			else if (ra == 1) { //crossover
+				Grid* copy = crossover(&init.at(ri).g, &init.at(ri2).g, nets, nodes); //repleace with multithreaded version
+				vector<Bounds> b;
+				e = copy->calcCost(w1, w2, w3, nets, routable, wireConstraint, b) - r.cost;
 			}
 			else {
 				Grid copy = r.g;
 				int rx = rand() % copy.getGridX(); //create initial grid x param;
 				int ry = rand() % copy.getGridY();//create initial grid y param;
 				copy.mutation(rx, ry);
+				bool test = r.g.getCoords() == copy.getCoords();
 				bool route = false;
 				vector<Bounds> b;
 				float cost = copy.calcCost(w1, w2, w3, nets, routable, wireConstraint, b);
@@ -362,7 +398,7 @@ double schedule(double temp, double initialTemp) {
 
 Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> const nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false; // Ensure it's declared
-	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint);
+	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
 	double initT = t;
 	vector<Result> population = initialGrids;
 	vector<Result> new_pop;

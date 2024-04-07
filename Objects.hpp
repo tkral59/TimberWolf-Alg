@@ -125,6 +125,8 @@ public:
     void placeNode(int x, int y, const Node* node);
     bool isNodePlaced(const Node* node) const;
     int getGridSize() const { return grid.size(); }
+    vector<vector<square>> getGrid();
+    map<string, Coords> getCoords();
 
     // If you decide to make crossover a member function
     //static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);

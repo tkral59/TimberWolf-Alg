@@ -322,7 +322,7 @@ void Grid::smartMutation(int x1, int y1, vector<Bounds> bo, map<string, Net> net
     }
     for (Bounds b : bo) {
         for (auto net : grid[x1][y1].getNode()->getNets()) {
-            if (*b.name == net->name) {
+            if (b.name == net->name) {
                 x = b;
                 exit;
             }
@@ -481,67 +481,72 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     }
 }
 
-
-float Grid::calcCost(float const w1, float const w2, float const w3, map<string, Net> nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
+float Grid::calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-    std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
+    bounded.clear(); // Clear previous bounds
 
-    //vector<Bounds> bounded;
-    bounded.clear();//incase bounded already populated
+    // Process each net to calculate wirelength and critical net cost
+    for (const auto& [netName, net] : nets) {
+        if (net.Nodes.empty()) continue;
 
-    for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
-        const Net* net = &netPair.second;
-        auto name = net->name;
-        int xmin = 0, xmax = xmin, ymin = 0, ymax = ymin;
-        Bounds newBounds;
-        // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
+        int xmin = INT_MAX, xmax = INT_MIN, ymin = INT_MAX, ymax = INT_MIN;
 
-        for (size_t i = 0; i < net->Nodes.size(); ++i) { //iterate through nodes and find min/max x/y
-            int x = nodeCoords.at(net->Nodes.at(i)->getName()).x;
-            int y = nodeCoords.at(net->Nodes.at(i)->getName()).x;
-            if (x < xmin) xmin = x;
-            if (x > xmax) xmax = x;
-            if (y < ymin) ymin = y;
-            if (y > ymax) ymax = y;
-
-            totalLength += abs(xmax - xmin) + abs(ymax - ymin);
-            if (net->isCritical) critCost += totalLength / 2; //if the net is critical then add additional cost equivlent to 1/2 net length
-
-
+        // Determine the bounding box for each net
+        for (const auto* nodePtr : net.Nodes) {
+            const auto& coords = nodeCoords.at(nodePtr->getName());
+            xmin = std::min(xmin, coords.x);
+            xmax = std::max(xmax, coords.x);
+            ymin = std::min(ymin, coords.y);
+            ymax = std::max(ymax, coords.y);
         }
-        if (xmax > 125 || ymax > 125) {
-            cout << "flag" << endl;
-        }
-        newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax;
-        newBounds.name = new string(nets[name].name);
-        bounded.push_back(newBounds);
 
-        //calculated overlap of nets
-        int olcount = 0;
-        for (Bounds const bounds : bounded) {
-            if (*bounds.name != netPair.first) {
-                //overlap cost (total nets overlap)
-                float x_overlap = max(0, min(newBounds.x2, bounds.x2) - max(newBounds.x1, bounds.x1)); //x overlap
-                float y_overlap = max(0, min(newBounds.y2, bounds.y2) - max(newBounds.y1, bounds.y1));//y overlap
-                float interArea = x_overlap * y_overlap; //total intersection area
-                float area1 = abs(newBounds.x2 - newBounds.x1) * abs(newBounds.y2 - newBounds.y1); //calculating area of current net box
-                float area2 = abs(bounds.x2 - bounds.x1) * abs(bounds.y2 - bounds.y1); //net j box area
-                if ((interArea / min(area1, area2)) <= 0.25) { //if overlap is greater than 25%
-                    olcount++;
-                    overlapCount += interArea;
-                    if (olcount > wireConstraint) routable = false; break; //if overlapping net boxes > constraint then the design is not routable
-                }
+        // Calculate total wirelength for the net
+        int wirelength = (xmax - xmin) + (ymax - ymin);
+        totalLength += wirelength;
+
+        // Add additional cost for critical nets
+        if (net.isCritical) {
+            critCost += wirelength * 0.5; // 50% additional cost for critical nets
+        }
+
+        Bounds bounds{netName, xmin, ymin, xmax, ymax};
+        bounded.push_back(bounds);
+    }
+
+    // Calculate overlaps and update routability
+    overlapCount = calculateOverlaps(bounded, wireConstraint, routable);
+
+    // Normalize cost components
+    float gridArea = static_cast<float>(grid.size() * grid[0].size());
+    float normalizedLength = totalLength / gridArea;
+    float normalizedOverlap = overlapCount / (nets.size() * gridArea);
+    float normalizedCritCost = critCost / (nets.size() * gridArea);
+
+    // Compute total cost
+    totalCost = w1 * normalizedLength + w2 * normalizedOverlap + w3 * normalizedCritCost;
+
+    std::cout << "Total Cost:" << totalCost << ", Routable: " << (routable ? "Yes" : "No") << std::endl;
+    return totalCost;
+}
+
+float Grid::calculateOverlaps(const vector<Bounds>& bounds, int wireConstraint, bool& routable) const {
+    float overlapCount = 0;
+    routable = true;
+
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        for (size_t j = i + 1; j < bounds.size(); ++j) {
+            int x_overlap = std::max(0, std::min(bounds[i].x2, bounds[j].x2) - std::max(bounds[i].x1, bounds[j].x1));
+            int y_overlap = std::max(0, std::min(bounds[i].y2, bounds[j].y2) - std::max(bounds[i].y1, bounds[j].y1));
+            float overlapArea = x_overlap * y_overlap;
+
+            if (overlapArea > 0) {
+                overlapCount += overlapArea;
+                if (--wireConstraint < 0) routable = false;
             }
         }
     }
-    float den = (grid.size() * grid[0].size());
-    float ocnorm = overlapCount / (nets.size() * den); //normalized overlap count cost => total count of nets is max, min is zero
 
-    float tlnorm = totalLength / (nets.size() * den); //normallized total length cost => total grid area * net count is max, min is ~ 1
-    float crnorm = critCost / (nets.size() * den) / 2;
-    totalCost = (w1 * tlnorm) + (w2 * ocnorm) + (w3 + crnorm);
-    cout << "Total Cost:" << totalCost << ", Routable: " << (routable ? "Yes" : "No") << endl;
-    return totalCost;
+    return overlapCount;
 }
 
 float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2) {
@@ -584,4 +589,3 @@ vector<vector<square>> Grid::getGrid() {
 map<string, Coords> Grid::getCoords() {
     return nodeCoords;
 }
-

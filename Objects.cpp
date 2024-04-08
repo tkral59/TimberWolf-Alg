@@ -484,8 +484,6 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
 float Grid::calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
     float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
     bounded.clear(); // Clear previous bounds
-    cout << "Calculating cost with weights w1 = " << w1 << ", w2 = " << w2 << ",w3 = " << w3 << endl;
-    int gridArea = grid.size() * grid[0].size(); // Calculate grid area once
 
     // Process each net to calculate wirelength and critical net cost
     for (const auto& [netName, net] : nets) {
@@ -503,14 +501,15 @@ float Grid::calcCost(float const w1, float const w2, float const w3, const map<s
         }
 
         // Calculate total wirelength for the net
-        totalLength += (xmax - xmin) + (ymax - ymin);
+        int wirelength = (xmax - xmin) + (ymax - ymin);
+        totalLength += wirelength;
 
         // Add additional cost for critical nets
         if (net.isCritical) {
-            critCost += ((xmax - xmin) + (ymax - ymin)) / 2; // 50% additional cost for critical nets
+            critCost += wirelength * 0.5; // 50% additional cost for critical nets
         }
 
-        Bounds bounds{ netName, xmin, ymin, xmax, ymax };
+        Bounds bounds{netName, xmin, ymin, xmax, ymax};
         bounded.push_back(bounds);
     }
 
@@ -518,7 +517,8 @@ float Grid::calcCost(float const w1, float const w2, float const w3, const map<s
     overlapCount = calculateOverlaps(bounded, wireConstraint, routable);
 
     // Normalize cost components
-    float normalizedLength = static_cast<float>(totalLength) / gridArea;
+    float gridArea = static_cast<float>(grid.size() * grid[0].size());
+    float normalizedLength = totalLength / gridArea;
     float normalizedOverlap = overlapCount / (nets.size() * gridArea);
     float normalizedCritCost = critCost / (nets.size() * gridArea);
 

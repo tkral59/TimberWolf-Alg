@@ -17,6 +17,7 @@ Node::Node() {
     nets = netlist;
     x = 0;
     y = 0;
+    z = 0;
 }
 
 Node::Node(string name, vector<Net*> nets, int x, int y, bool isTerminal) {
@@ -43,6 +44,10 @@ int Node::getX() const {
 int Node::getY() const {
     return y; // Assuming 'y' is an integer member variable of Node
 }
+
+int Node::getZ() const {
+    return z;
+}
 void Node::setXY(int newX, int newY) {
     this->x = newX;
     this->y = newY;
@@ -59,7 +64,14 @@ void Node::removeNet(Net* net) {
 }
 
 string Node::getName() const {
-    return this->name;
+    if (this->name.empty() || x < -33 || y < -33) {
+        cout << "uh oh" << endl;
+        return "uh oh";
+    }
+    else {
+        return this->name;
+    }
+
 }
 
 
@@ -75,7 +87,7 @@ void Node::setTerminal(bool terminal) {
 //SQUARE CLASS
 
 square::square() {
-    type = squareType::Routing;
+    type = squareType::Node;
     node = nullptr;
     wires = 0;
 }
@@ -169,6 +181,7 @@ void utilGrid::move(int x1o, int y1o, int x2o, int y2o) {
     int x2 = x2o * 2;
     int y1 = y1o * 2;
     int y2 = y2o * 2;
+
     if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
         if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
         else {
@@ -197,9 +210,16 @@ Grid::Grid(const std::map<std::string, Node>& nodes) {
     initialPlacement(nodes);
 }
 
+Grid::Grid(int totalNodes) {
+    int gridSize = ceil(sqrt(totalNodes) * 1.1);
+    grid = vector<vector<square>>(gridSize, vector<square>(gridSize, square()));
+}
+
 void Grid::write(int x, int y, square s) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[x].size()) {
         grid[x][y] = s;
+        Coords c(x, y);
+        nodeCoords[s.getNode()->getName()] = c;
         if (2 * x < ug.grid.size() && 2 * y < ug.grid[0].size()) { // Assuming ug.grid is public; adjust if it's private
             ug.write(x * 2, y * 2, s);
         }
@@ -212,48 +232,134 @@ void Grid::write(int x, int y, square s) {
 void Grid::updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal) {
     Coords a(x2, y2);
     Coords b(x1, y1);
-    if (isTerminal) {
-        eterms.push_back(a);
-        auto it = find(eterms.begin(), eterms.end(), b);
-        eterms.erase(it);
+    enodes.push_back(b);
+    grid[x2][y2].setNode(nullptr);
+    for (auto it = enodes.begin(); it != enodes.end(); ++it) {
+        if ((*it).x == a.x && (*it).y == a.y) {
+            enodes.erase(it);
+            break; // Optional, if you know there is only one element with the value 3
+        }
+    } //somtimes causes errors
+}
+
+void Grid::updateEnodes() {
+    enodes.clear();
+    for (int i = 1; i < (grid.size() - 1); i++) {
+        for (int j = 1; j < (grid[0].size() - 1); j++) {
+            if (grid[i][j].getNode() == nullptr) {
+                Coords c(i, j);
+                enodes.push_back(c);
+            }
+        }
     }
-    else {
-        enodes.push_back(a);
-        auto it = find(enodes.begin(), enodes.end(), b);
-        enodes.erase(it);
-    }
+
 }
 
 void Grid::move(int x1, int y1, int x2, int y2) {
-    if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if one is node and the other is empty
-        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "movement dims outside of grid." << endl;
-        else {
-            if (grid[x2][y2].getNode() == nullptr) {
-                grid[x2][y2] = grid[x1][y1];
-                updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
-            }
-            else if (grid[x1][y1].getNode() == nullptr) {
-                grid[x1][y1] = grid[x2][y2];
-                updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
-            }
-
-            ug.move(x1, y1, x2, y2);
-        }
+    if (grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) {
+        cout << "Cannot cast move on terminal nodes." << endl;
     }
-    else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to move non-matching types." << endl;
+    else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Trying to Move out of bounds" << endl;
+        else  if (grid[x2][y2].getNode() == nullptr) {
+            if (grid[x1][y1].getNode() != nullptr) {
+                nodeCoords[grid[x1][y1].getNode()->getName()].x = x2;
+                nodeCoords[grid[x1][y1].getNode()->getName()].y = y2;
+            }
+            grid[x2][y2] = grid[x1][y1];
+            grid[x1][y1].setNode(nullptr);
+            updateEmpties(x1, y1, x2, y2, grid[x1][y1].getType() == squareType::Terminal);
+        }
+        else if (grid[x1][y1].getNode() == nullptr) {
+            nodeCoords[grid[x2][y2].getNode()->getName()].x = x1;
+            nodeCoords[grid[x2][y2].getNode()->getName()].y = y1;
+            grid[x1][y1] = grid[x2][y2];
+            grid[x2][y2].setNode(nullptr);
+
+            updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
+        }
+        else cout << "Trying to move to none empty Node square" << endl;
+    }
 }
 
 void Grid::swap(int x1, int y1, int x2, int y2) {
-    if ((grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) || (grid[x1][y1].getType() == squareType::Terminal && grid[x2][y2].getType() == squareType::Terminal)) { // if appropiate type and matching
-        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Swap dims outside of grid." << endl;
+    if (grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) {
+        cout << "Cannot cast move on terminal nodes." << endl;
+    }
+    else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Trying to Swap out of bounds" << endl;
+        else if (grid[x2][y2].getNode() == nullptr || grid[x1][y1].getNode() == nullptr) cout << "Trying to swap with a nullptr" << endl;
         else {
+            if (grid[x2][y2].getNode() != nullptr) {
+                nodeCoords[grid[x2][y2].getNode()->getName()].x = x1;
+                nodeCoords[grid[x2][y2].getNode()->getName()].y = y1;
+            }
+            if (grid[x1][y1].getNode() != nullptr) {
+                nodeCoords[grid[x1][y1].getNode()->getName()].x = x2;
+                nodeCoords[grid[x1][y1].getNode()->getName()].y = y2;
+            }
             square temp = grid[x1][y1];
             grid[x1][y1] = grid[x2][y2];
             grid[x2][y2] = temp;
-            ug.swap(x1, y1, x2, y2);
+            //ug.swap(x1, y1, x2, y2);
         }
     }
-    else if (grid[x1][y1].getType() == squareType::Node || grid[x2][y2].getType() == squareType::Node || grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) cout << "Error: Trying to swap non-matching types." << endl;
+}
+
+void Grid::smartMutation(int x1, int y1, vector<Bounds> bo, map<string, Net> nets) {
+    int ran = rand() % 2;
+    int rand_x = 0;
+    int rand_y = 0;
+    int ran_i = 0;
+    Bounds x;
+    bool flag = false;
+    if (grid[x1][y1].getNode() == nullptr) {
+        flag = true;
+    }
+    if (flag) {
+        mutation(x1, y1);
+        return;
+    }
+    for (Bounds b : bo) {
+        for (auto net : grid[x1][y1].getNode()->getNets()) {
+            if (b.name == net->name) {
+                x = b;
+                exit;
+            }
+        }
+
+
+    }
+
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> xdistribution(x.x1, x.x2);
+    std::uniform_int_distribution<int> ydistribution(x.y1, x.y2);
+    if (x.x2 > 125 || x.y2 > 125) {
+        cout << "Crazy Bounds" << endl;
+    }
+    if (ran % 2 == 0) { //Even will use the swap function
+        rand_x = xdistribution(gen);
+        rand_y = ydistribution(gen);
+
+        swap(x1, y1, rand_x, rand_y);
+    }
+    else {  //Odd will use the move function
+        for (auto c : enodes) {
+            if (c.x < x.x2 && c.x > x.x1 && c.y < x.y2 && c.y > x.y1) {
+                if (c.x > 125 || c.y > 125) {
+                    cout << "Crazy Coordinate" << endl;
+                }
+                move(x1, y1, c.x, c.y);
+                return;
+            }
+        }
+        ran_i = rand() % enodes.size();
+        rand_x = enodes.at(ran_i).x;
+        rand_y = enodes.at(ran_i).y;
+        move(x1, y1, rand_x, rand_y);
+    }
 }
 
 void Grid::mutation(int x1, int y1) {
@@ -268,18 +374,10 @@ void Grid::mutation(int x1, int y1) {
         swap(x1, y1, rand_x, rand_y);
     }
     else {  //Odd will use the move function
-        if (getSquare(x1, y1).getType() == squareType::Terminal) {
-            ran_i = rand() % eterms.size();
-            rand_x = eterms.at(ran_i).x;
-            rand_y = eterms.at(ran_i).y;
-            move(x1, y1, rand_x, rand_y);
-        }
-        else {
-            ran_i = rand() % enodes.size();
-            rand_x = enodes.at(ran_i).x;
-            rand_y = enodes.at(ran_i).y;
-            move(x1, y1, rand_x, rand_y);
-        }
+        ran_i = rand() % enodes.size();
+        rand_x = enodes.at(ran_i).x;
+        rand_y = enodes.at(ran_i).y;
+        move(x1, y1, rand_x, rand_y);
     }
 }
 
@@ -336,13 +434,15 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
         int spacing = (edge == 't' || edge == 'b') ? grid[0].size() / (numTerminals + 1)
             : grid.size() / (numTerminals + 1);
         for (int i = 0; i < numTerminals; ++i) {
-            int pos = (i + 1) * spacing;
+            int pos = 0;
+            if (spacing == 1)  pos = ((i + 1) * spacing);
+            else  pos = ((i + 1) * spacing) - 1; //want to start at index 1 no terminals at corners
             int x = 0, y = 0;
             if (edge == 't') { x = pos; y = 0; }
             else if (edge == 'b') { x = pos; y = grid.size() - 1; }
             else if (edge == 'l') { x = 0; y = pos; }
             else if (edge == 'r') { x = grid[0].size() - 1; y = pos; }
-            write(x, y, square(squareType::Terminal, edgeTerminals[i]));
+            write(y, x, square(squareType::Terminal, edgeTerminals[i]));
         }
     };
 
@@ -352,7 +452,7 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
     distributeTerminals(rightEdge, 'r');
 
     // Place non-terminal nodes randomly
-    std::uniform_int_distribution<int> distX(0, grid.size() - 1), distY(0, grid[0].size() - 1);
+    std::uniform_int_distribution<int> distX(1, grid.size() - 2), distY(1, grid[0].size() - 2);
 
     for (auto pair : nodes) {
         auto& node = pair.second;
@@ -363,77 +463,106 @@ void Grid::initialPlacement(const std::map<std::string, Node>& nodes) {
                 int randomY = distY(rng);
                 if (occupiedPositions.find({ randomX, randomY }) == occupiedPositions.end()) {
                     // If position is not occupied, place the node
-                    write(randomX, randomY, square(squareType::Node, &node));
+                    write(randomX, randomY, square(squareType::Node, &nodes.at(node.getName())));
                     occupiedPositions.insert({ randomX, randomY });
                     placed = true;
                 }
             }
         }
     }
-}
 
-
-float Grid::calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
-    float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
-std::cout << "Calculating cost... w1: " << w1 << ", w2: " << w2 << "\n";
-    
-    //vector<Bounds> bounded;
-    bounded.clear();//incase bounded already populated
-    for (const auto& netPair : nets) { // Assuming 'nets' is accessible and stores the Net objects
-        const Net* net = &netPair.second;
-        int xmin = net->Nodes.at(0)->getX(), xmax = xmin, ymin = net->Nodes.at(0)->getX(), ymax = ymin;
-        Bounds newBounds;
-        // Calculate the wirelength for this net by finding the x and y bounds (half-param measure)
-
-        for (size_t i = 0; i < net->Nodes.size(); ++i) { //iterate through nodes and find min/max x/y
-            int x = net->Nodes.at(i)->getX();
-            int y = net->Nodes.at(i)->getY();
-            if (x < xmin) xmin = x;
-            if (x > xmax) xmax = x;
-            if (y < ymin) ymin = y;
-            if (y > ymax) ymax = y;
-
-            totalLength = abs(xmax - xmin) + abs(ymax - ymin);
-            if (net->isCritical) critCost += totalLength / 2; //if the net is critical then add additional cost equivlent to 1/2 net length
-
-            newBounds.x1 = xmin, newBounds.x2 = xmax, newBounds.y1 = ymin, newBounds.y2 = ymax, newBounds.net = net;
-        }
-        bounded.push_back(newBounds);
-
-        //calculated overlap of nets
-        int olcount = 0;
-        for (Bounds const bounds : bounded) {
-            if (bounds.net->name != netPair.first) {
-                //overlap cost (total nets overlap)
-                float x_overlap = max(0, min(newBounds.x2, bounds.x2) - max(newBounds.x1, bounds.x1)); //x overlap
-                float y_overlap = max(0, min(newBounds.y2, bounds.y2) - max(newBounds.y1, bounds.y1));//y overlap
-                float interArea = x_overlap * y_overlap; //total intersection area
-                float area1 = abs(newBounds.x2 - newBounds.x1) * abs(newBounds.y2 - newBounds.y1); //calculating area of current net box
-                float area2 = abs(bounds.x2 - bounds.x1) * abs(bounds.y2 - bounds.y1); //net j box area
-                if ((interArea / min(area1, area2)) <= 0.25) { //if overlap is greater than 25%
-                    olcount++;
-                    overlapCount++;
-                    if (olcount > wireConstraint) routable = false; //if overlapping net boxes > constraint then the design is not routable
-                }
+    for (int i = 1; i < grid.size() - 1; i++) {
+        for (int j = 1; j < grid[0].size() - 1; j++) {
+            if (grid[i][j].getNode() == nullptr) {
+                Coords c(i, j);
+                enodes.push_back(c);
             }
         }
     }
-    float ocnorm = overlapCount / static_cast<float>(nets.size()); // Normalized overlap count cost
-    float den = static_cast<float>(grid.size() * grid[0].size()); // Use direct grid dimensions
-    float tlnorm = totalLength / den; // Normalized total length cost
-    totalCost = (w1 * tlnorm) + (w2 * ocnorm); // Combine costs with weights
-    std::cout << "Total Cost: " << totalCost << ", Routable: " << (routable ? "Yes" : "No") << "\n";
+}
 
+float Grid::calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const {
+    float totalCost = 0, totalLength = 0, overlapCount = 0, critCost = 0;
+    bounded.clear(); // Clear previous bounds
+
+    // Process each net to calculate wirelength and critical net cost
+    for (const auto& [netName, net] : nets) {
+        if (net.Nodes.empty()) continue;
+
+        int xmin = INT_MAX, xmax = INT_MIN, ymin = INT_MAX, ymax = INT_MIN;
+
+        // Determine the bounding box for each net
+        for (const auto* nodePtr : net.Nodes) {
+            const auto& coords = nodeCoords.at(nodePtr->getName());
+            xmin = std::min(xmin, coords.x);
+            xmax = std::max(xmax, coords.x);
+            ymin = std::min(ymin, coords.y);
+            ymax = std::max(ymax, coords.y);
+        }
+
+        // Calculate total wirelength for the net
+        int wirelength = (xmax - xmin) + (ymax - ymin);
+        totalLength += wirelength;
+
+        // Add additional cost for critical nets
+        if (net.isCritical) {
+            critCost += wirelength * 0.5; // 50% additional cost for critical nets
+        }
+
+        Bounds bounds{netName, xmin, ymin, xmax, ymax};
+        bounded.push_back(bounds);
+    }
+
+    // Calculate overlaps and update routability
+    overlapCount = calculateOverlaps(bounded, wireConstraint, routable);
+
+    // Normalize cost components
+    float gridArea = static_cast<float>(grid.size() * grid[0].size());
+    float normalizedLength = totalLength / gridArea;
+    float normalizedOverlap = overlapCount / (nets.size() * gridArea);
+    float normalizedCritCost = critCost / (nets.size() * gridArea);
+
+    // Compute total cost
+    totalCost = w1 * normalizedLength + w2 * normalizedOverlap + w3 * normalizedCritCost;
+
+    std::cout << "Total Cost:" << totalCost << ", Routable: " << (routable ? "Yes" : "No") << std::endl;
     return totalCost;
+}
+
+float Grid::calculateOverlaps(const vector<Bounds>& bounds, int wireConstraint, bool& routable) const {
+    float overlapCount = 0;
+    routable = true;
+
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        for (size_t j = i + 1; j < bounds.size(); ++j) {
+            int x_overlap = std::max(0, std::min(bounds[i].x2, bounds[j].x2) - std::max(bounds[i].x1, bounds[j].x1));
+            int y_overlap = std::max(0, std::min(bounds[i].y2, bounds[j].y2) - std::max(bounds[i].y1, bounds[j].y1));
+            float overlapArea = x_overlap * y_overlap;
+
+            if (overlapArea > 0) {
+                overlapCount += overlapArea;
+                if (--wireConstraint < 0) routable = false;
+            }
+        }
+    }
+
+    return overlapCount;
+}
+
+
+float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2) {
+    return 0;
 }
 
 void Grid::placeNode(int x, int y, const Node* node) {
     if (x >= 0 && x < grid.size() && y >= 0 && y < grid[0].size()) {
         grid[x][y].setNode(node);
+        Coords c(x, y);
+        nodeCoords[node->getName()] = c;
     }
     else {
         // Handle the error: position out of bounds
-        std::cerr << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
+        std::cout << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
     }
 }
 
@@ -452,4 +581,12 @@ int Grid::getGridY() {
 
 int Grid::getGridX() {
     return grid.at(0).size();
+}
+
+vector<vector<square>> Grid::getGrid() {
+    return grid;
+}
+
+map<string, Coords> Grid::getCoords() {
+    return nodeCoords;
 }

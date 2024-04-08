@@ -549,7 +549,6 @@ float Grid::calculateOverlaps(const vector<Bounds>& bounds, int wireConstraint, 
     return overlapCount;
 }
 
-
 float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2) {
     return 0;
 }

@@ -127,7 +127,7 @@ public:
     void smartMutation(int x1, int y1, vector<Bounds> b, map<string, Net> nets);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
-   float calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    float calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
     float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2);
     int getGridX();
     int getGridY();

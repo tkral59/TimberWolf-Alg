@@ -509,7 +509,7 @@ float Grid::calcCost(float const w1, float const w2, float const w3, const map<s
             critCost += wirelength * 0.5; // 50% additional cost for critical nets
         }
 
-        Bounds bounds{netName, xmin, ymin, xmax, ymax};
+        Bounds bounds{ netName, xmin, ymin, xmax, ymax };
         bounded.push_back(bounds);
     }
 

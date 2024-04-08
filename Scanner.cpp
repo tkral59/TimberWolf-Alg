@@ -177,11 +177,16 @@ Result bestCost(vector<Result> results) {
 void tryPlaceNode(const Node* node, int i, int j, set<std::string>& placedNodeNames, Grid& child, set<string>& toBePlaced) {
 	if (!node || placedNodeNames.count(node->getName())) return; // Already placed
 	// Find a position for the node
-	if (!child.getSquare(i, j).getNode()) { // Position is empty
+	if (child.getSquare(i, j).getNode() == nullptr) { // Position is empty
+		if (node->getName().empty()) {
+			cout << "WARNING" << endl;
+		}
 		child.placeNode(i, j, node);
+
 		placedNodeNames.insert(node->getName());
 		auto it = toBePlaced.find(node->getName());
-		toBePlaced.erase(it);
+		if (it != toBePlaced.end()) toBePlaced.erase(it);
+
 		return;
 	}
 }
@@ -203,13 +208,19 @@ Grid crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& n
 	for (int i = 0; i <= crossoverPoint; ++i) {
 		for (int j = 0; j < child.getGridY(); j++) {
 			if (parent1->getSquare(i, j).getNode() != nullptr) {
-				tryPlaceNode(parent1->getSquare(i, j).getNode(), i, j, placedNodeNames, child, toBePlaced);
+				Node* node = new Node;
+				*node = nodes.at(parent1->getGrid()[i][j].getNode()->getName());
+				tryPlaceNode(node, i, j, placedNodeNames, child, toBePlaced);
 			}
 		}
 	}
 	for (int i = crossoverPoint + 1; i < child.getGridSize(); i++) {
 		for (int j = 0; j < child.getGridY(); j++) {
-			if (parent2->getSquare(i, j).getNode() != nullptr) tryPlaceNode(parent2->getSquare(i, j).getNode(), i, j, placedNodeNames, child, toBePlaced);
+			if (parent2->getSquare(i, j).getNode() != nullptr) {
+				Node* node = new Node;
+				*node = nodes.at(parent2->getGrid()[i][j].getNode()->getName());
+				tryPlaceNode(node, i, j, placedNodeNames, child, toBePlaced);
+			}
 		}
 	}
 	/*
@@ -228,7 +239,9 @@ Grid crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& n
 	for (int i = 0; i < child.getGridX(); i++) {
 		for (int j = 0; j < child.getGridY(); j++) {
 			if (child.getSquare(i, j).getNode() == nullptr && !toBePlaced.empty()) {
-				tryPlaceNode(&nodes.at(*toBePlaced.begin()), i, j, placedNodeNames, child, toBePlaced);
+				Node* node = new Node;
+				*node = nodes.at(*toBePlaced.begin());
+				tryPlaceNode(node, i, j, placedNodeNames, child, toBePlaced);
 			}
 		}
 	}
@@ -439,8 +452,11 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 	double deltaC = 0;
 	cout << "Initial Cost: " << bestCost(population).cost << endl;
 	int iteration = 1;
-	while (t > 0) {
+	while (t > 0.01) {
 		while (routable == false) {
+			if (iteration == 3) {
+				cout << "flag" << endl;
+			}
 			cout << "Iteration " << iteration << "; Temp = " << t << endl;
 			new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
 
@@ -546,7 +562,7 @@ int main() {
 	}
 
 	Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
-
+	exportForVisualization(bestResult, "results.txt");
 	if (!bestResult.routable) {
 		std::cerr << "Failed to find a routable solution.\n";
 		return 1;

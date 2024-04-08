@@ -64,7 +64,14 @@ void Node::removeNet(Net* net) {
 }
 
 string Node::getName() const {
-    return this->name;
+    if (this->name.empty() || x < -33 || y < -33) {
+        cout << "uh oh" << endl;
+        return "uh oh";
+    }
+    else {
+        return this->name;
+    }
+
 }
 
 
@@ -250,10 +257,10 @@ void Grid::updateEnodes() {
 
 void Grid::move(int x1, int y1, int x2, int y2) {
     if (grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) {
-        cerr << "Cannot cast move on terminal nodes." << endl;
+        cout << "Cannot cast move on terminal nodes." << endl;
     }
     else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
-        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cerr << "Trying to Move out of bounds" << endl;
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Trying to Move out of bounds" << endl;
         else  if (grid[x2][y2].getNode() == nullptr) {
             if (grid[x1][y1].getNode() != nullptr) {
                 nodeCoords[grid[x1][y1].getNode()->getName()].x = x2;
@@ -271,16 +278,17 @@ void Grid::move(int x1, int y1, int x2, int y2) {
 
             updateEmpties(x2, y2, x1, y1, grid[x1][y1].getType() == squareType::Terminal);
         }
-        else cerr << "Trying to move to none empty Node square" << endl;
+        else cout << "Trying to move to none empty Node square" << endl;
     }
 }
 
 void Grid::swap(int x1, int y1, int x2, int y2) {
     if (grid[x1][y1].getType() == squareType::Terminal || grid[x2][y2].getType() == squareType::Terminal) {
-        cerr << "Cannot cast move on terminal nodes." << endl;
+        cout << "Cannot cast move on terminal nodes." << endl;
     }
     else if (grid[x1][y1].getType() == squareType::Node && grid[x2][y2].getType() == squareType::Node) {
-        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cerr << "Trying to Swap out of bounds" << endl;
+        if (x1 > grid.size() || y1 > grid[0].size() || x2 > grid.size() || y2 > grid[0].size()) cout << "Trying to Swap out of bounds" << endl;
+        else if (grid[x2][y2].getNode() == nullptr || grid[x1][y1].getNode() == nullptr) cout << "Trying to swap with a nullptr" << endl;
         else {
             if (grid[x2][y2].getNode() != nullptr) {
                 nodeCoords[grid[x2][y2].getNode()->getName()].x = x1;
@@ -548,7 +556,7 @@ void Grid::placeNode(int x, int y, const Node* node) {
     }
     else {
         // Handle the error: position out of bounds
-        std::cerr << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
+        std::cout << "Error: Position (" << x << ", " << y << ") is out of bounds for placing a node.\n";
     }
 }
 

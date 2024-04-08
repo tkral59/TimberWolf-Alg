@@ -115,25 +115,32 @@ void read(const string netfile, const string nodefile, const string plfile, map<
 		myFile.close();
 	}
 }
-
-bool sortByValueDescending(const std::pair<string, Net>& a, const std::pair<string, Net>& b) {//ChatGPT
+bool sortByValueDescending(const pair<string, Net>& a, const pair<string, Net>& b) {
 	return a.second.nodesSize > b.second.nodesSize;
 }
 
-void findTop10Percent(const std::map<string, Net>& inputMap) {//ChatGPT
-	// Calculate the number of elements that constitute the top 10%
-	int top10PercentSize = inputMap.size() * 0.1;
+void findTop10Percent(map<string, Net>& inputMap) {
+	if (inputMap.empty()) {
+		cout << "Input map is empty." << endl;
+		return;
+	}
 
-	// Convert the map to a vector of pairs for sorting
-	std::vector<std::pair<string, Net>> vec(inputMap.begin(), inputMap.end());
+	size_t top10PercentSize = ceil(inputMap.size() * 0.1);
+	top10PercentSize = max(top10PercentSize, size_t(1)); // Ensure at least one element is considered
 
-	// Sort the vector by value in descending order
-	std::sort(vec.begin(), vec.end(), sortByValueDescending);
+	vector<pair<string, Net*>> vec; // Use pointers to avoid copying and to modify original map objects
+	for (auto& pair : inputMap) {
+		vec.emplace_back(pair.first, &pair.second);
+	}
 
-	// Output the top 10% elements
-	std::cout << "Top 10% elements:" << std::endl;
-	for (int i = 0; i < top10PercentSize; ++i) {
-		vec[i].second.isCritical = true;
+	// Partially sort to find the top elements only
+	nth_element(vec.begin(), vec.begin() + top10PercentSize, vec.end(),
+		[](const auto& a, const auto& b) { return a.second->nodesSize > b.second->nodesSize; });
+
+	cout << "Top 10% elements:" << endl;
+	for (size_t i = 0; i < top10PercentSize; ++i) {
+		vec[i].second->isCritical = true;
+		cout << "Net: " << vec[i].first << " is marked as critical." << endl;
 	}
 }
 bool isNumeric(const std::string& str) {
@@ -252,13 +259,19 @@ Grid crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& n
 }
 
 void exportForVisualization(Result r, const std::string& filename) {
-	std::ofstream file(filename);
+	std::ofstream file(filename); // Open the file for writing
+	if (!file.is_open()) { // Check if the file was opened successfully
+		std::cerr << "Error: Unable to open file " << filename << " for writing." << std::endl;
+		return;
+	}
+	// Write the header to the file
 	file << "Net,Xmin,Ymin,Xmax,Ymax\n";
-	for (auto b : r.bounds) {
+	// Write the bounds data to the file
+	for (auto& b : r.bounds) {
 		// Assume bounds are calculated and stored somewhere accessible
 		file << b.name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
 	}
-	file.close();
+	file.close(); // Close the file
 }
 
 void performCrossoversThread(std::vector<Result>& offspring, vector<Result>& parents, map<std::string, Net> nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes, float w1, float w2, float w3, int wireConstraint) {
@@ -364,6 +377,7 @@ vector<Result> perturb(std::vector<Result>& population, map<std::string, Net>& n
 			int rx = distx(gen);
 			int ry = disty(gen);
 			copy->smartMutation(rx, ry, nextGeneration[in].bounds, nets);
+			//copy->mutation(rx, ry);
 		}
 		//copy->mutation(rx, ry);
 		bool rout = false;
@@ -405,7 +419,9 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				Grid copy = r.g;
 				int rx = rand() % copy.getGridX(); //create initial grid x param;
 				int ry = rand() % copy.getGridY();//create initial grid y param;
-				copy.mutation(rx, ry);
+				for (int i = 0; i < 150; i++) {
+					copy.mutation(rx, ry);
+				}
 				//copy.smartMutation(rx, ry, r.bounds);
 				bool route = false;
 				vector<Bounds> b;
@@ -435,7 +451,7 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 
 double schedule(double temp, double initialTemp) {
 	double percentComplete = (initialTemp - temp) / initialTemp;
-	if (percentComplete < 0.8 || percentComplete > 0.92) {
+	if (percentComplete < 0.1 || percentComplete > 0.92) {
 		return 0.95 * temp;
 	}
 	else return 0.9 * temp; //changed to cool slower
@@ -443,8 +459,8 @@ double schedule(double temp, double initialTemp) {
 
 Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> nets, int wireConstraint, map<string, Node> nodes) {
 	bool routable = false; // Ensure it's declared
-	//double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
-	double t = 0.157;
+	double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
+	//double t = 0.157;
 	double initT = t;
 	vector<Result> population = initialGrids;
 	vector<Result> new_pop;
@@ -452,53 +468,48 @@ Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float con
 	double deltaC = 0;
 	cout << "Initial Cost: " << bestCost(population).cost << endl;
 	int iteration = 1;
-	while (t > 0.01) {
-		while (routable == false) {
-			if (iteration == 3) {
-				cout << "flag" << endl;
-			}
-			cout << "Iteration " << iteration << "; Temp = " << t << endl;
-			new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
+	while (t > 0.01 && routable == false) {
+		cout << "Iteration " << iteration << "; Temp = " << t << endl;
+		new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
 
-			Result nbc = bestCost(new_pop);
-			if (nbc.routable == true) {
-				return nbc;
-				routable = true;
-			}
-			deltaC = nbc.cost - bestCost(population).cost; //NEED BEST COST FUNCTION
-			cout << "\t Best Delta C = " << deltaC << endl;
-
-			// for exploration
-			random_device rd;
-			mt19937 gen(rd()); //seed;
-			uniform_real_distribution<double> dis(0.0, 1.0);
-			double r = dis(gen);
-			double e = exp(deltaC / t);
-			//end exploration parameters
-			sort(population.begin(), population.end(), compareByFloat);
-			sort(new_pop.begin(), new_pop.end(), compareByFloat);
-			//if better cost, exploit
-			double sum1 = 0, sum2 = 0;
-
-			for (int i = 0; i < 3; i++) {
-				sum1 += population.at(i).cost;
-				sum2 += new_pop.at(i).cost;
-			}
-			if (sum2 < sum1) { //take top 3 results and compare
-				population = new_pop;
-				if (nbc.cost < bestCost(best_pop).cost) {
-					best_pop = new_pop;
-					cout << "\t \t new best population!" << endl;
-				}
-			}
-
-			//chance to explore
-			else if (r > e) {
-				population = new_pop;
-			}
-			t = schedule(t, initT);
-			iteration++;
+		Result nbc = bestCost(new_pop);
+		if (nbc.routable == true) {
+			return nbc;
+			routable = true;
 		}
+		deltaC = nbc.cost - bestCost(population).cost; //NEED BEST COST FUNCTION
+		cout << "\t Best Delta C = " << deltaC << endl;
+
+		// for exploration
+		random_device rd;
+		mt19937 gen(rd()); //seed;
+		uniform_real_distribution<double> dis(0.0, 1.0);
+		double r = dis(gen);
+		double e = exp(deltaC / t);
+		//end exploration parameters
+		sort(population.begin(), population.end(), compareByFloat);
+		sort(new_pop.begin(), new_pop.end(), compareByFloat);
+		//if better cost, exploit
+		double sum1 = 0, sum2 = 0;
+
+		for (int i = 0; i < 3; i++) {
+			sum1 += population.at(i).cost;
+			sum2 += new_pop.at(i).cost;
+		}
+		if (sum2 < sum1) { //take top 3 results and compare
+			population = new_pop;
+			if (nbc.cost < bestCost(best_pop).cost) {
+				best_pop = new_pop;
+				cout << "\t \t new best population!" << endl;
+			}
+		}
+
+		//chance to explore
+		else if (r > e) {
+			population = new_pop;
+		}
+		t = schedule(t, initT);
+		iteration++;
 	}
 	return bestCost(best_pop);
 }
@@ -554,6 +565,7 @@ int main() {
 		<< ", NumTerminals: " << numTerminals << ".\n";
 	findTop10Percent(nets);
 	std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
+	exportForVisualization(init.at(0), "initial.txt");
 	std::cout << "Initializing optimization with " << init.size() << " initial grids.\n";
 
 	if (init.empty()) {

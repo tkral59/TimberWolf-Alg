@@ -116,32 +116,32 @@ void read(const string netfile, const string nodefile, const string plfile, map<
 	}
 }
 bool sortByValueDescending(const pair<string, Net>& a, const pair<string, Net>& b) {
-    return a.second.nodesSize > b.second.nodesSize;
+	return a.second.nodesSize > b.second.nodesSize;
 }
 
 void findTop10Percent(map<string, Net>& inputMap) {
-    if (inputMap.empty()) {
-        cout << "Input map is empty." << endl;
-        return;
-    }
+	if (inputMap.empty()) {
+		cout << "Input map is empty." << endl;
+		return;
+	}
 
-    size_t top10PercentSize = ceil(inputMap.size() * 0.1);
-    top10PercentSize = max(top10PercentSize, size_t(1)); // Ensure at least one element is considered
+	size_t top10PercentSize = ceil(inputMap.size() * 0.1);
+	top10PercentSize = max(top10PercentSize, size_t(1)); // Ensure at least one element is considered
 
-    vector<pair<string, Net*>> vec; // Use pointers to avoid copying and to modify original map objects
-    for (auto& pair : inputMap) {
-        vec.emplace_back(pair.first, &pair.second);
-    }
+	vector<pair<string, Net*>> vec; // Use pointers to avoid copying and to modify original map objects
+	for (auto& pair : inputMap) {
+		vec.emplace_back(pair.first, &pair.second);
+	}
 
-    // Partially sort to find the top elements only
-    nth_element(vec.begin(), vec.begin() + top10PercentSize, vec.end(), 
-                [](const auto& a, const auto& b) { return a.second->nodesSize > b.second->nodesSize; });
+	// Partially sort to find the top elements only
+	nth_element(vec.begin(), vec.begin() + top10PercentSize, vec.end(),
+		[](const auto& a, const auto& b) { return a.second->nodesSize > b.second->nodesSize; });
 
-    cout << "Top 10% elements:" << endl;
-    for (size_t i = 0; i < top10PercentSize; ++i) {
-        vec[i].second->isCritical = true;
-        cout << "Net: " << vec[i].first << " is marked as critical." << endl;
-    }
+	cout << "Top 10% elements:" << endl;
+	for (size_t i = 0; i < top10PercentSize; ++i) {
+		vec[i].second->isCritical = true;
+		cout << "Net: " << vec[i].first << " is marked as critical." << endl;
+	}
 }
 bool isNumeric(const std::string& str) {
 	return !str.empty() && std::all_of(str.begin(), str.end(), [](char c) { return std::isdigit(c) || c == '-'; });
@@ -259,13 +259,19 @@ Grid crossover(Grid* parent1, Grid* parent2, const std::map<std::string, Net>& n
 }
 
 void exportForVisualization(Result r, const std::string& filename) {
-	std::ofstream file(filename);
+	std::ofstream file(filename); // Open the file for writing
+	if (!file.is_open()) { // Check if the file was opened successfully
+		std::cerr << "Error: Unable to open file " << filename << " for writing." << std::endl;
+		return;
+	}
+	// Write the header to the file
 	file << "Net,Xmin,Ymin,Xmax,Ymax\n";
-	for (auto b : r.bounds) {
+	// Write the bounds data to the file
+	for (auto& b : r.bounds) {
 		// Assume bounds are calculated and stored somewhere accessible
 		file << b.name << "," << b.x1 << "," << b.y1 << "," << b.x2 << "," << b.y2 << "\n";
 	}
-	file.close();
+	file.close(); // Close the file
 }
 
 void performCrossoversThread(std::vector<Result>& offspring, vector<Result>& parents, map<std::string, Net> nets, int startIdx, int endIdx, std::mutex& offspringMutex, map<string, Node> nodes, float w1, float w2, float w3, int wireConstraint) {
@@ -370,7 +376,8 @@ vector<Result> perturb(std::vector<Result>& population, map<std::string, Net>& n
 			std::uniform_int_distribution<> disty(1, copy->getGridY() - 2);
 			int rx = distx(gen);
 			int ry = disty(gen);
-			copy->smartMutation(rx, ry, nextGeneration[in].bounds, nets);
+			//copy->smartMutation(rx, ry, nextGeneration[in].bounds, nets);
+			copy->mutation(rx, ry);
 		}
 		//copy->mutation(rx, ry);
 		bool rout = false;
@@ -412,7 +419,9 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 				Grid copy = r.g;
 				int rx = rand() % copy.getGridX(); //create initial grid x param;
 				int ry = rand() % copy.getGridY();//create initial grid y param;
-				copy.mutation(rx, ry);
+				for (int i = 0; i < 150; i++) {
+					copy.mutation(rx, ry);
+				}
 				//copy.smartMutation(rx, ry, r.bounds);
 				bool route = false;
 				vector<Bounds> b;
@@ -442,76 +451,79 @@ double generateInitialTemp(vector<Result> init, double prob, float const w1, flo
 
 double schedule(double temp, double initialTemp) {
 	double percentComplete = (initialTemp - temp) / initialTemp;
-	if (percentComplete < 0.8 || percentComplete > 0.92) {
+	if (percentComplete < 0.1 || percentComplete > 0.92) {
 		return 0.95 * temp;
 	}
 	else return 0.9 * temp; //changed to cool slower
 }
 
 Result simulatedAnnealing(vector<Result> initialGrids, float const w1, float const w2, float const w3, map<string, Net> nets, int wireConstraint, map<string, Node> nodes) {
-    bool routable = false;
-    double t = 0.157;
-    double initT = t;
-    vector<Result> population = initialGrids;
-    vector<Result> new_pop;
-    vector<Result> best_pop = population;
-    double deltaC = 0;
-    cout << "Initial Cost: " << bestCost(population).cost << endl;
+	bool routable = false; // Ensure it's declared
+	//double t = generateInitialTemp(initialGrids, 5., w1, w2, w3, nets, routable, wireConstraint, nodes);
+	double t = 92.52;
+	double initT = t;
+	vector<Result> population = initialGrids;
+	vector<Result> new_pop;
+	vector<Result> best_pop = population;
+	double deltaC = 0;
+	cout << "Initial Cost: " << bestCost(population).cost << endl;
 
-    std::ofstream outFile("best_costs.txt");
-    if (!outFile) {
-        std::cerr << "Failed to open file for writing.\n";
-        exit(1); // Handle error as needed
-    }
+	std::ofstream outFile("best_costs.txt");
+	if (!outFile) {
+		std::cerr << "Failed to open file for writing.\n";
+		exit(1); // Handle error as needed
+	}
 
-    int iteration = 1;
-    while (t > 0.01) {
-        while (!routable) {
-            cout << "Iteration " << iteration << "; Temp = " << t << endl;
-            new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25);
+	int iteration = 1;
+	while (t > 0.01 && routable == false) {
+		if (iteration == 3) {
+			cout << "flag" << endl;
+		}
+		cout << "Iteration " << iteration << "; Temp = " << t << endl;
+		new_pop = perturb(population, nets, w1, w2, w3, wireConstraint, nodes, 0.3, 0.3, 0.25); //NEED PERTURB FUNCTION //NEEDS TO RETURN LIST OF GRIDS : COST : ROUTABLE?
 
-            Result nbc = bestCost(new_pop);
-            if (nbc.routable == true) {
-                outFile.close();
-                return nbc;
-            }
-            deltaC = nbc.cost - bestCost(population).cost;
-            cout << "\t Best Delta C = " << deltaC << endl;
+		Result nbc = bestCost(new_pop);
+		if (nbc.routable == true) {
+			outFile.close();
+			return nbc;
+		}
+		deltaC = nbc.cost - bestCost(population).cost;
+		cout << "\t Best Delta C = " << deltaC << endl;
 
-            random_device rd;
-            mt19937 gen(rd());
-            uniform_real_distribution<double> dis(0.0, 1.0);
-            double r = dis(gen);
-            double e = exp(deltaC / t);
+		random_device rd;
+		mt19937 gen(rd());
+		uniform_real_distribution<double> dis(0.0, 1.0);
+		double r = dis(gen);
+		double e = exp(deltaC / t);
 
-            sort(population.begin(), population.end(), compareByFloat);
-            sort(new_pop.begin(), new_pop.end(), compareByFloat);
+		sort(population.begin(), population.end(), compareByFloat);
+		sort(new_pop.begin(), new_pop.end(), compareByFloat);
 
-            double sum1 = 0, sum2 = 0;
-            for (int i = 0; i < 3; i++) {
-                sum1 += population.at(i).cost;
-                sum2 += new_pop.at(i).cost;
-            }
-            if (sum2 < sum1) {
-                population = new_pop;
-                if (nbc.cost < bestCost(best_pop).cost) {
-                    best_pop = new_pop;
-                    cout << "\t \t new best population!" << endl;
-                }
-            } else if (r > e) {
-                population = new_pop;
-            }
+		double sum1 = 0, sum2 = 0;
+		for (int i = 0; i < 3; i++) {
+			sum1 += population.at(i).cost;
+			sum2 += new_pop.at(i).cost;
+		}
+		if (sum2 < sum1) {
+			population = new_pop;
+			if (nbc.cost < bestCost(best_pop).cost) {
+				best_pop = new_pop;
+				cout << "\t \t new best population!" << endl;
+			}
+		}
+		else if (r > e) {
+			population = new_pop;
+		}
 
-            // Updated logging line including temperature and best delta C
-            outFile << "Iteration: " << iteration << ", Temperature: " << t << ", Best Cost: " << bestCost(best_pop).cost << ", Best Delta C: " << deltaC << std::endl;
+		// Updated logging line including temperature and best delta C
+		outFile << "Iteration: " << iteration << ", Temperature: " << t << ", Best Cost: " << bestCost(best_pop).cost << ", Best Delta C: " << deltaC << std::endl;
 
-            t = schedule(t, initT);
-            iteration++;
-        }
-    }
+		t = schedule(t, initT);
+		iteration++;
+	}
 
-    outFile.close();
-    return bestCost(best_pop);
+	outFile.close();
+	return bestCost(best_pop);
 }
 /*
 void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& nets, int wireConstraint, float initialTemperature = 100.0f, int totalSteps = 10000) {
@@ -551,64 +563,66 @@ void simulatedAnnealing(Grid& initialGrid, const std::map<std::string, Net>& net
 
 
 int main() {
-    auto start = std::chrono::high_resolution_clock::now();
+	auto start = std::chrono::high_resolution_clock::now();
 
-    std::string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
-    std::string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
-    std::string plfile = "P2Benchmarks\\ibm01\\ibm01.pl";
+	std::string netfile = "P2Benchmarks\\ibm01\\ibm01.nets";
+	std::string nodefile = "P2Benchmarks\\ibm01\\ibm01.nodes";
+	std::string plfile = "P2Benchmarks\\ibm01\\ibm01.pl";
 
-    std::map<std::string, Node> nodes;
-    std::map<std::string, Net> nets;
-    int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
+	std::map<std::string, Node> nodes;
+	std::map<std::string, Net> nets;
+	int numNets = 0, numPins = 0, numNodes = 0, numTerminals = 0;
 
-    read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
+	read(netfile, nodefile, plfile, nodes, nets, numNets, numPins, numNodes, numTerminals);
 
-    // Open summary file early to write benchmark summary before proceeding
-    std::ofstream summaryFile("optimization_summary.txt", std::ios_base::app);
-    if (summaryFile) {
-        // Benchmark information written at the start
-        summaryFile << "Benchmark Summary:\n";
-        summaryFile << "Total Nodes: " << numNodes << "\n";
-        summaryFile << "Total Nets: " << numNets << "\n";
-        summaryFile << "Total Pins: " << numPins << "\n";
-        summaryFile << "Total Terminals: " << numTerminals << "\n\n";
-    } else {
-        std::cerr << "Failed to open summary log file for appending.\n";
-        return 1;
-    }
+	// Open summary file early to write benchmark summary before proceeding
+	std::ofstream summaryFile("optimization_summary.txt", std::ios_base::app);
+	if (summaryFile) {
+		// Benchmark information written at the start
+		summaryFile << "Benchmark Summary:\n";
+		summaryFile << "Total Nodes: " << numNodes << "\n";
+		summaryFile << "Total Nets: " << numNets << "\n";
+		summaryFile << "Total Pins: " << numPins << "\n";
+		summaryFile << "Total Terminals: " << numTerminals << "\n\n";
+	}
+	else {
+		std::cerr << "Failed to open summary log file for appending.\n";
+		return 1;
+	}
 
-    findTop10Percent(nets);
-    std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
-    double initialCost = init.empty() ? 0 : bestCost(init).cost;
-    
+	findTop10Percent(nets);
+	std::vector<Result> init = createInitialGrids(nodes, 10, 1.0, 1.0, 1.0, nets, 4);
+	double initialCost = init.empty() ? 0 : bestCost(init).cost;
+	exportForVisualization(init[0], "initial.txt");
 
-    if (init.empty()) {
-        std::cerr << "Failed to create initial grids. Aborting optimization.\n";
-        summaryFile.close();
-        return 1;
-    }
+	if (init.empty()) {
+		std::cerr << "Failed to create initial grids. Aborting optimization.\n";
+		summaryFile.close();
+		return 1;
+	}
 
-    Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
-    exportForVisualization(bestResult, "results.txt");
-    if (!bestResult.routable) {
-        std::cerr << "Failed to find a routable solution.\n";
-        summaryFile << "Failed to find a routable solution.\n";
-    } else {
-        std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
-    }
+	Result bestResult = simulatedAnnealing(init, 1.0, 1.0, 1.0, nets, 4, nodes);
+	exportForVisualization(bestResult, "results.txt");
+	if (!bestResult.routable) {
+		std::cerr << "Failed to find a routable solution.\n";
+		summaryFile << "Failed to find a routable solution.\n";
+	}
+	else {
+		std::cout << "Optimization successful. Best cost: " << bestResult.cost << ".\n";
+	}
 
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    double improvement = initialCost - bestResult.cost;
-    double improvementPercentage = initialCost > 0 ? (improvement / initialCost) * 100 : 0;
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	double improvement = initialCost - bestResult.cost;
+	double improvementPercentage = initialCost > 0 ? (improvement / initialCost) * 100 : 0;
 
 	summaryFile << "Optimization Results:\n";
 	summaryFile << "Initial Cost: " << initialCost << "\n";  // Log the initial cost
-    summaryFile << "Final Cost: " << bestResult.cost << "\n";
-    summaryFile << "Improvement: " << improvement << " (" << improvementPercentage << "%)\n";
-    summaryFile << "Routable Solution Found: " << (bestResult.routable ? "Yes" : "No") << "\n";
-    summaryFile << "Total Execution Time: " << duration.count() / 1000.0 << " seconds\n\n";
-    summaryFile.close();
+	summaryFile << "Final Cost: " << bestResult.cost << "\n";
+	summaryFile << "Improvement: " << improvement << " (" << improvementPercentage << "%)\n";
+	summaryFile << "Routable Solution Found: " << (bestResult.routable ? "Yes" : "No") << "\n";
+	summaryFile << "Total Execution Time: " << duration.count() / 1000.0 << " seconds\n\n";
+	summaryFile.close();
 
-    return bestResult.routable ? 0 : 1;
+	return bestResult.routable ? 0 : 1;
 }

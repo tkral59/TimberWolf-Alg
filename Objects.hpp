@@ -23,22 +23,32 @@ struct Net {
 
 struct Coords {
     int x, y;
+    Coords() = default;
     Coords(int x, int y) : x(x), y(y) {}
     bool operator==(const Coords& other) const {//ChatGPT
         return x == other.x && y == other.y;
     }
+    Node* n;
 };
 
 struct Bounds {
+    std::string name;
     int x1, x2, y1, y2;
-    const Net* net;
+
+    // Default constructor
+    Bounds() : name(""), x1(0), x2(0), y1(0), y2(0) {}
+
+    // Constructor with parameters
+    Bounds(const std::string& n, int minX, int minY, int maxX, int maxY)
+        : name(n), x1(minX), x2(maxX), y1(minY), y2(maxY) {}
 };
+
 
 class Node {
 private:
     std::string name;
     std::vector<Net*> nets;
-    int x = 0, y = 0;
+    int x = 0, y = 0, z = 0;
     bool isTerminalFlag = false; // Renamed to avoid conflict with isTerminal() function
 
 public:
@@ -47,6 +57,7 @@ public:
     ~Node(); // Destructor
     int getX() const;
     int getY() const;
+    int getZ() const;
     void setXY(int newX, int newY);
     std::vector<Net*> getNets() const;
     void addNet(Net* net);
@@ -103,26 +114,33 @@ private:
     vector<vector<square>> grid;
     utilGrid ug;
     vector<Coords> enodes; //coords of empty nodes in grid
-    vector<Coords> eterms;
+    map<string, Coords> nodeCoords;//map name to coordinates
+
 public:
     Grid();
     Grid(const std::map<std::string, Node>& nodes); // Updated constructor
+    Grid(int totalNodes); //empty grid of certain size
     void write(int x, int y, square s);
     void swap(int x1, int y1, int x2, int y2);
     void move(int x1, int y1, int x2, int y2);
     void mutation(int x1, int y1);
+    void smartMutation(int x1, int y1, vector<Bounds> b, map<string, Net> nets);
     void initialPlacement(const std::map<std::string, Node>& nodes);
     square getSquare(int x, int y); //get square with coordinates
-    float calcCost(float const w1, float const w2, map<string, Net> const nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+   float calcCost(float const w1, float const w2, float const w3, const map<string, Net>& nets, bool& routable, int wireConstraint, vector<Bounds>& bounded) const;
+    float updateCost(float const w1, float const w2, float const w3, bool& routable, int wireConstraint, vector<Bounds>& bounded, bool isSwap, int x1, int x2, int y1, int y2);
     int getGridX();
     int getGridY();
+    void updateEnodes();
     void updateEmpties(int x1, int y1, int x2, int y2, bool isTerminal);
     // New methods for crossover support
     //int getGridSize() const;
     void placeNode(int x, int y, const Node* node);
     bool isNodePlaced(const Node* node) const;
     int getGridSize() const { return grid.size(); }
-
+    vector<vector<square>> getGrid();
+    map<string, Coords> getCoords();
+    float calculateOverlaps(const vector<Bounds>& bounds, int wireConstraint, bool& routable) const;
     // If you decide to make crossover a member function
     //static Grid* crossover(const Grid& parent1, const Grid& parent2, const std::map<std::string, Net>& nets);
     friend class square;
@@ -136,5 +154,6 @@ struct Result {
     Result(Grid g, float cost, bool routable, vector<Bounds> bounds) : g(g), cost(cost), routable(routable), bounds(bounds) {}
     Result() : cost(0), routable(false) {}
 };
+
 
 #endif // DATASTRUCTURES_HPP
